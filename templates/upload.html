@@ -6,11 +6,11 @@
     <title>Finance Dashboard - Upload</title>
     <style>
         :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
-            --text-color: #e0e0e0;
-            --accent-color: #bb86fc;
-            --border-color: #333;
+            --bg-color: #f5f5dc; /* Light Beige */
+            --card-bg: #ffffff;
+            --text-color: #000000; /* Black */
+            --accent-color: #000000; /* Changed from blue to black */
+            --border-color: #cccccc;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -26,31 +26,32 @@
             background-color: var(--card-bg);
             padding: 2.5rem;
             border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             text-align: center;
             width: 400px;
             border: 1px solid var(--border-color);
         }
-        h1 { color: var(--accent-color); margin-bottom: 1.5rem; }
-        p { color: #aaa; margin-bottom: 2rem; }
+        h1 { color: var(--text-color); margin-bottom: 1.5rem; }
+        p { color: #333; margin-bottom: 2rem; }
         input[type="file"] {
             margin-bottom: 1.5rem;
-            background: #2c2c2c;
+            background: #f8f9fa;
             padding: 10px;
             border-radius: 6px;
             width: 100%;
             box-sizing: border-box;
             color: var(--text-color);
+            border: 1px solid var(--border-color);
         }
         button {
             background-color: var(--accent-color);
-            color: #121212;
+            color: #ffffff;
             border: none;
             padding: 12px 24px;
             border-radius: 6px;
             font-weight: bold;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: opacity 0.8s;
             width: 100%;
         }
         button:hover { opacity: 0.9; }

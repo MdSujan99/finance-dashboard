@@ -23,8 +23,16 @@ def clean_currency(value: Any) -> float:
     """Safely converts a value to a float for currency representation."""
     if pd.isna(value) or value == "":
         return 0.0
-    try:
+    if isinstance(value, (int, float)):
         return float(value)
+    
+    # If string, remove currency symbols, commas, and spaces
+    try:
+        clean_val = str(value).replace('₹', '').replace(',', '').strip()
+        # Some values might have multiple spaces or other characters
+        import re
+        clean_val = re.sub(r'[^\d.]', '', clean_val)
+        return float(clean_val) if clean_val else 0.0
     except (ValueError, TypeError):
         return 0.0
 
@@ -222,14 +230,21 @@ class FinanceParser:
         df = self._read_sheet("Credit Card Payments")
         payments = []
         if not df.empty:
+            # Convert Payment Date to datetime
             df['Payment Date'] = pd.to_datetime(df['Payment Date'], errors='coerce')
-            df = df.dropna(subset=['Payment Date']).sort_values('Payment Date')
+            df = df.dropna(subset=['Payment Date'])
+            
+            # Clean and convert Amount Paid to numeric
+            df['Amount Paid'] = df['Amount Paid'].apply(clean_currency)
+            
+            # Sort by date
+            df = df.sort_values('Payment Date')
             
             for _, row in df.iterrows():
                 payments.append({
                     "date": row['Payment Date'].strftime('%Y-%m-%d'),
-                    "amount": clean_currency(row.get('Amount Paid', 0)),
-                    "card": str(row.get('Card Name', 'Unknown'))
+                    "amount": row['Amount Paid'],
+                    "card": str(row['Card Name']).strip()
                 })
         return payments
 

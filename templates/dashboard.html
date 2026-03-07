@@ -6,14 +6,14 @@
     <title>Personal Finance Dashboard</title>
     <style>
         :root {
-            --bg-color: #0f111a;
-            --card-bg: #1a1c27;
-            --text-main: #e6e6e6;
-            --text-dim: #9499b0;
-            --accent: #00d4ff;
-            --danger: #ff4d4d;
-            --success: #00e676;
-            --border: #2d3142;
+            --bg-color: #f5f5dc; /* Light Beige */
+            --card-bg: #ffffff;
+            --text-main: #000000; /* Black */
+            --text-dim: #333333;
+            --accent: #000000; /* Changed from blue to black */
+            --danger: #ff0000; /* Red */
+            --success: #008000; /* Green */
+            --border: #cccccc;
         }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -28,16 +28,16 @@
             align-items: center;
             margin-bottom: 2rem;
         }
-        h1 { margin: 0; font-size: 1.5rem; color: var(--accent); }
+        h1 { margin: 0; font-size: 1.5rem; color: var(--text-main); }
         .upload-link {
             text-decoration: none;
-            color: var(--text-dim);
+            color: var(--text-main);
             font-size: 0.9rem;
             border: 1px solid var(--border);
             padding: 0.5rem 1rem;
             border-radius: 6px;
         }
-        .upload-link:hover { background: var(--border); }
+        .upload-link:hover { background: #eeeeee; }
 
         /* KPI Grid */
         .kpi-grid {
@@ -70,15 +70,15 @@
             border-radius: 12px;
             border: 1px solid var(--border);
         }
-        .section h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 1.2rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        .section h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 1.2rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
 
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th { text-align: left; color: var(--text-dim); padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border); }
-        td { padding: 0.75rem 0.5rem; border-bottom: 1px solid #252836; }
+        td { padding: 0.75rem 0.5rem; border-bottom: 1px solid #eeeeee; }
         
         .overdue { color: var(--danger); font-weight: bold; }
-        .util-bar-bg { background: #2d3142; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden; }
-        .util-bar-fill { background: var(--accent); height: 100%; }
+        .util-bar-bg { background: #eeeeee; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+        .util-bar-fill { background: var(--success); height: 100%; }
         .high-util { background: var(--danger) !important; }
 
     </style>
@@ -167,7 +167,7 @@
                     {% endfor %}
                 </tbody>
                 <tfoot>
-                    <tr style="font-weight: bold; background: rgba(255,255,255,0.05);">
+                    <tr style="font-weight: bold; background: rgba(0,0,0,0.05);">
                         <td>TOTAL</td>
                         <td>{{ "{:,.0f}".format(data.total_cc_due) }} / {{ "{:,.0f}".format(data.total_cc_limit) }}</td>
                         <td>
@@ -241,7 +241,15 @@
 
     <!-- Graph Section -->
     <div class="section" style="margin-top: 2rem;">
-        <h2>Credit Card Payments History</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+            <h2 style="margin: 0; border: none;">Credit Card Payments History</h2>
+            <div>
+                <label for="cardFilter" style="font-size: 0.85rem; color: var(--text-dim); margin-right: 0.5rem;">Filter Card:</label>
+                <select id="cardFilter" style="padding: 0.3rem 0.5rem; border-radius: 4px; border: 1px solid var(--border); font-size: 0.85rem; background: var(--card-bg); color: var(--text-main);">
+                    <option value="ALL">All Cards</option>
+                </select>
+            </div>
+        </div>
         <div style="height: 300px; width: 100%;">
             <canvas id="paymentsChart"></canvas>
         </div>
@@ -249,48 +257,98 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        const ctx = document.getElementById('paymentsChart').getContext('2d');
-        const labels = [{% for p in data.payments_history %}"{{ p.date }}",{% endfor %}];
-        const amounts = [{% for p in data.payments_history %}{{ p.amount }},{% endfor %}];
-        const cards = [{% for p in data.payments_history %}"{{ p.card }}",{% endfor %}];
+        const rawPayments = [
+            {% for p in data.payments_history %}
+            { date: "{{ p.date }}", amount: {{ p.amount }}, card: "{{ p.card }}" },
+            {% endfor %}
+        ];
 
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Payment Amount (₹)',
-                    data: amounts,
-                    backgroundColor: 'rgba(0, 212, 255, 0.5)',
-                    borderColor: 'rgba(0, 212, 255, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            afterLabel: function(context) {
-                                return 'Card: ' + cards[context.dataIndex];
-                            }
-                        }
-                    },
-                    legend: { display: false }
+        // Populate card filter options
+        const cardNames = [...new Set(rawPayments.map(p => p.card))].sort();
+        const select = document.getElementById('cardFilter');
+        cardNames.forEach(card => {
+            const option = document.createElement('option');
+            option.value = card;
+            option.textContent = card;
+            select.appendChild(option);
+        });
+
+        const ctx = document.getElementById('paymentsChart').getContext('2d');
+        let paymentsChart;
+
+        function updateChart(filter) {
+            // Filter and Aggregate Data
+            let filtered = rawPayments;
+            if (filter !== 'ALL') {
+                filtered = rawPayments.filter(p => p.card === filter);
+            }
+
+            // Aggregate by date (sum amounts for same date)
+            const aggregated = {};
+            filtered.forEach(p => {
+                if (!aggregated[p.date]) {
+                    aggregated[p.date] = { amount: 0, cards: [] };
+                }
+                aggregated[p.date].amount += p.amount;
+                if (!aggregated[p.date].cards.includes(p.card)) {
+                    aggregated[p.date].cards.push(p.card);
+                }
+            });
+
+            const sortedDates = Object.keys(aggregated).sort();
+            const amounts = sortedDates.map(d => aggregated[d].amount);
+            const cardsInfo = sortedDates.map(d => aggregated[d].cards.join(', '));
+
+            if (paymentsChart) {
+                paymentsChart.destroy();
+            }
+
+            paymentsChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedDates,
+                    datasets: [{
+                        label: 'Total Payment (₹)',
+                        data: amounts,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        borderColor: 'rgba(0, 0, 0, 1)',
+                        borderWidth: 1
+                    }]
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: '#2d3142' },
-                        ticks: { color: '#9499b0' }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    return 'Cards: ' + cardsInfo[context.dataIndex];
+                                }
+                            }
+                        },
+                        legend: { display: false }
                     },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: '#9499b0' }
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#cccccc' },
+                            ticks: { color: '#000000' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#000000' }
+                        }
                     }
                 }
-            }
+            });
+        }
+
+        // Initial render
+        updateChart('ALL');
+
+        // Handle filter changes
+        select.addEventListener('change', (e) => {
+            updateChart(e.target.value);
         });
     </script>
 
