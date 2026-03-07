@@ -10,7 +10,14 @@ def migrate_excel_to_sqlite(excel_path: str):
         print(f"Excel file not found at {excel_path}")
         return
 
-    # 1. Create Tables
+    # 1. Reset Database (Hard Reset)
+    db_file = "finance.db"
+    if os.path.exists(db_file):
+        print(f"Deleting existing database {db_file} for a fresh start...")
+        # Close all connections first if possible, but for SQLite, removing the file is usually fine
+        os.remove(db_file)
+
+    # 2. Create Tables
     print("Creating database tables...")
     create_db_and_tables()
 
