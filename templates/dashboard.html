@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --card-bg: #1a1c27;
+            --text-main: #e6e6e6;
+            --text-dim: #9499b0;
+            --accent: #00d4ff;
+            --danger: #ff4d4d;
+            --success: #00e676;
+            --border: #2d3142;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        h1 { margin: 0; font-size: 1.5rem; color: var(--accent); }
+        .upload-link {
+            text-decoration: none;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+        }
+        .upload-link:hover { background: var(--border); }
+
+        /* KPI Grid */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+        .kpi-card {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .kpi-label { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.5rem; }
+        .kpi-value { font-size: 1.4rem; font-weight: bold; }
+        .kpi-value.money::before { content: "₹"; margin-right: 4px; }
+
+        /* Tables and Sections */
+        .section-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 900px) { .section-grid { grid-template-columns: 1fr; } }
+        
+        .section {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .section h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 1.2rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; color: var(--text-dim); padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border); }
+        td { padding: 0.75rem 0.5rem; border-bottom: 1px solid #252836; }
+        
+        .overdue { color: var(--danger); font-weight: bold; }
+        .util-bar-bg { background: #2d3142; height: 6px; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+        .util-bar-fill { background: var(--accent); height: 100%; }
+        .high-util { background: var(--danger) !important; }
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Finance Dashboard</h1>
+        <a href="/" class="upload-link">Upload New File</a>
+    </header>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">Total Cash</div>
+            <div class="kpi-value money">{{ "{:,.0f}".format(data.total_cash) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Total Savings</div>
+            <div class="kpi-value money">{{ "{:,.0f}".format(data.total_savings) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Total Credit Due</div>
+            <div class="kpi-value money" style="color: var(--danger)">{{ "{:,.0f}".format(data.total_cc_due) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Money Lent Out</div>
+            <div class="kpi-value money">{{ "{:,.0f}".format(data.total_lent) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Net Worth Estimate</div>
+            <div class="kpi-value money" style="color: var(--success)">{{ "{:,.0f}".format(data.net_worth) }}</div>
+        </div>
+    </div>
+
+    <div class="section-grid">
+        <!-- Active Lendings -->
+        <div class="section">
+            <h2>Active Lendings</h2>
+            {% if data.active_lendings %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Person</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in data.active_lendings %}
+                    <tr>
+                        <td>{{ item.person }}</td>
+                        <td class="money">{{ "{:,.0f}".format(item.amount) }}</td>
+                        <td class="{{ 'overdue' if item.overdue else '' }}">{{ item.due_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--text-dim)">No active lendings found.</p>
+            {% endif %}
+        </div>
+
+        <!-- Credit Card Utilisation -->
+        <div class="section">
+            <h2>Credit Card Utilisation</h2>
+            {% if data.cc_utilization %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Card</th>
+                        <th>Due / Limit</th>
+                        <th>Util %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cc in data.cc_utilization %}
+                    <tr>
+                        <td>{{ cc.name }}</td>
+                        <td>{{ "{:,.0f}".format(cc.due) }} / {{ "{:,.0f}".format(cc.limit) }}</td>
+                        <td>
+                            {{ cc.utilization }}%
+                            <div class="util-bar-bg">
+                                <div class="util-bar-fill {{ 'high-util' if cc.utilization > 70 else '' }}" style="width: {{ cc.utilization }}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="font-weight: bold; background: rgba(255,255,255,0.05);">
+                        <td>TOTAL</td>
+                        <td>{{ "{:,.0f}".format(data.total_cc_due) }} / {{ "{:,.0f}".format(data.total_cc_limit) }}</td>
+                        <td>
+                            {{ data.total_cc_utilization }}%
+                            <div class="util-bar-bg">
+                                <div class="util-bar-fill {{ 'high-util' if data.total_cc_utilization > 70 else '' }}" style="width: {{ data.total_cc_utilization }}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+            {% else %}
+            <p style="color: var(--text-dim)">No credit card data found.</p>
+            {% endif %}
+        </div>
+
+        <!-- Active EMIs -->
+        <div class="section">
+            <h2>Active EMIs / Loans</h2>
+            {% if data.active_emis %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Monthly EMI</th>
+                        <th>Remaining</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for emi in data.active_emis %}
+                    <tr>
+                        <td>{{ emi.item }}</td>
+                        <td class="money">{{ "{:,.0f}".format(emi.amount) }}</td>
+                        <td>{{ emi.remaining }} mos</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--text-dim)">No active EMIs found.</p>
+            {% endif %}
+        </div>
+
+        <!-- Monthly Income -->
+        <div class="section">
+            <h2>Monthly Income Summary</h2>
+            {% if data.incomes %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>Source</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in data.incomes %}
+                    <tr>
+                        <td>{{ inc.month }}</td>
+                        <td>{{ inc.source }}</td>
+                        <td class="money">{{ "{:,.0f}".format(inc.amount) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--text-dim)">No income history found.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Graph Section -->
+    <div class="section" style="margin-top: 2rem;">
+        <h2>Credit Card Payments History</h2>
+        <div style="height: 300px; width: 100%;">
+            <canvas id="paymentsChart"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('paymentsChart').getContext('2d');
+        const labels = [{% for p in data.payments_history %}"{{ p.date }}",{% endfor %}];
+        const amounts = [{% for p in data.payments_history %}{{ p.amount }},{% endfor %}];
+        const cards = [{% for p in data.payments_history %}"{{ p.card }}",{% endfor %}];
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Payment Amount (₹)',
+                    data: amounts,
+                    backgroundColor: 'rgba(0, 212, 255, 0.5)',
+                    borderColor: 'rgba(0, 212, 255, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(context) {
+                                return 'Card: ' + cards[context.dataIndex];
+                            }
+                        }
+                    },
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#2d3142' },
+                        ticks: { color: '#9499b0' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#9499b0' }
+                    }
+                }
+            }
+        });
+    </script>
+
+</body>
+</html>
