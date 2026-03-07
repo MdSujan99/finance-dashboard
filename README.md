@@ -1,42 +1,78 @@
-# Personal Finance Dashboard
+# Personal Finance Dashboard (v2.0 - PostgreSQL)
 
-A local FastAPI web application to parse your personal finance Excel workbook and display a beautiful, dark-themed dashboard.
+A robust financial management system built with FastAPI, SQLModel, and PostgreSQL. It allows you to track net worth, credit card utilization, lendings, EMIs, and income history through both automated Excel sync and manual entry.
 
 ## Features
-- **File Upload**: Upload your `Finance_Logs.xlsx` directly via the UI.
-- **KPI Cards**: View Total Cash, Savings, BOB Credit Due, Money Lent Out, and Net Worth.
-- **Active Lendings**: Track who owes you money and see overdue flags.
-- **Credit Card Utilisation**: Monitor card usage with visual progress bars (BOB and others).
-- **EMIs & Loans**: Summary of active monthly installments.
-- **Income History**: Monthly income summary.
+- **PostgreSQL Persistence**: Robust data storage for long-term tracking.
+- **Manual Data Entry**: Update balances, record payments, and log income directly in the dashboard.
+- **Excel Migration**: One-click "Sync" to populate the database from a formatted Excel file.
+- **Interactive Visuals**: Filterable credit card payment history and utilization charts.
+- **Modern UI**: Clean, high-contrast Beige, Black, Green, and Red palette.
 
-## Setup & Run
+---
 
-1. **Create and Activate a Virtual Environment**:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+## 🚀 Setup & Installation
 
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Prerequisites
+- Python 3.10+
+- **PostgreSQL** installed and running locally.
+- A database named `finance`.
 
-3. **Run the Server**:
-   ```bash
-   uvicorn main:app --reload
-   ```
+### 2. Environment Configuration
+Create a `.env` file in the project root with your Postgres credentials:
+```env
+DB_USER=postgres
+DB_PASSWORD=your_password
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=finance
+```
 
-3. **Access the App**:
-   Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
+### 3. Installation
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-## Excel Structure Requirements
-The app expects a `.xlsx` file with the following sheets:
-- **Incomes**: Columns `Month`, `Amount`, `Source`.
-- **Credit Cards**: Columns `Card Name`, `Due Amount`, `Limit`, `Available`.
-- **Lendings**: Columns `Person`, `Amount`, `Due Date`, `isCleared`.
-- **EMIs**: Columns `Item`, `Monthly EMI`, `Remaining Months`, `IsClosed`.
-- **Net Worth**: Key-value pairs in the first two columns (e.g., "Cash", "Savings", "Net Worth").
+# Install dependencies
+pip install -r requirements.txt
+pip install sqlmodel psycopg2-binary python-dotenv
+```
 
-*Note: The parser automatically handles currency symbols (₹), commas, and blank rows.*
+### 4. Initial Data Migration
+To populate the database from your existing Excel file:
+```bash
+python3 migrate.py
+```
+*Note: This will reset the database and perform a fresh import from `temp_uploads/latest_finance.xlsx`.*
+
+### 5. Start the Application
+```bash
+python3 main.py
+```
+Visit `http://localhost:8000` to view your dashboard.
+
+---
+
+## 🛠 Database Management
+
+### Connecting via DBeaver
+1. **New Connection** -> Select **PostgreSQL**.
+2. **Host**: `localhost` | **Port**: `5432`.
+3. **Database**: `finance`.
+4. **Username/Password**: As defined in your `.env`.
+
+### Resetting the Database
+To wipe all data and start fresh from the Excel file, simply run:
+```bash
+python3 migrate.py
+```
+This script automatically drops all tables and recreates them to ensure a clean sync.
+
+---
+
+## 🎨 Color Palette
+- **Background**: Light Beige (`#f5f5dc`)
+- **Text/Primary**: Black (`#000000`)
+- **Success/Good**: Green (`#008000`)
+- **Danger/Bad**: Red (`#ff0000`)

@@ -1,6 +1,11 @@
+import os
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, create_engine
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class Account(SQLModel, table=True):
     """Maps to 'Net Worth' (Cash/Savings totals)"""
@@ -48,10 +53,19 @@ class Income(SQLModel, table=True):
     amount: float
     date: str  # e.g., "June 2025"
 
-# Database Engine Configuration
-sqlite_file_name = "finance.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-engine = create_engine(sqlite_url, echo=False)
+# Database Engine Configuration (PostgreSQL)
+db_user = os.getenv("DB_USER", "postgres")
+db_password = os.getenv("DB_PASSWORD", "secret")
+db_host = os.getenv("DB_HOST", "localhost")
+db_port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "finance")
+
+# Construct Postgres connection string
+postgres_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+engine = create_engine(postgres_url, echo=False)
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
+
+def drop_db_and_tables():
+    SQLModel.metadata.drop_all(engine)

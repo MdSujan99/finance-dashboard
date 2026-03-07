@@ -2,7 +2,7 @@ import os
 import re
 from datetime import datetime
 from sqlmodel import Session, select
-from models import create_db_and_tables, engine, Account, CreditCard, CCPayment, Lending, Loan, Income
+from models import create_db_and_tables, drop_db_and_tables, engine, Account, CreditCard, CCPayment, Lending, Loan, Income
 from main import FinanceParser
 
 def migrate_excel_to_sqlite(excel_path: str):
@@ -10,29 +10,26 @@ def migrate_excel_to_sqlite(excel_path: str):
         print(f"Excel file not found at {excel_path}")
         return
 
-    # 1. Reset Database (Hard Reset)
-    db_file = "finance.db"
-    if os.path.exists(db_file):
-        print(f"Deleting existing database {db_file} for a fresh start...")
-        # Close all connections first if possible, but for SQLite, removing the file is usually fine
-        os.remove(db_file)
+    # 1. Reset Database (Drop all tables for fresh start)
+    print("Resetting database (dropping all tables)...")
+    drop_db_and_tables()
 
     # 2. Create Tables
     print("Creating database tables...")
     create_db_and_tables()
 
-    # 2. Parse Excel
+    # 3. Parse Excel
     print("Parsing Excel file...")
     parser = FinanceParser(excel_path)
     data = parser.parse()
 
     with Session(engine) as session:
-        # 3. Migrate Accounts (Cash/Savings)
+        # 4. Migrate Accounts (Cash/Savings)
         print("Migrating Accounts...")
         session.add(Account(name="Total Cash", balance=data.get('total_cash', 0)))
         session.add(Account(name="Total Savings", balance=data.get('total_savings', 0)))
 
-        # 4. Migrate Credit Cards
+        # 5. Migrate Credit Cards
         print("Migrating Credit Cards and Payments...")
         cc_map = {} # To keep track of CC IDs for payments
         for cc_data in data.get('cc_utilization', []):
@@ -45,7 +42,7 @@ def migrate_excel_to_sqlite(excel_path: str):
             session.flush() # Get the ID
             cc_map[cc.name] = cc.id
 
-        # 5. Migrate Payments
+        # 6. Migrate Payments
         print(f"Migrating {len(data.get('payments_history', []))} Payments...")
         migrated_payments = 0
         for pay in data.get('payments_history', []):
@@ -58,8 +55,6 @@ def migrate_excel_to_sqlite(excel_path: str):
                 db_name_upper = db_card_name.upper()
                 db_card_words = [w.upper() for w in re.findall(r'\w+', db_name_upper)]
                 
-                # Check if any word from DB name is in the full payment card name
-                # or if any word from payment name is in the DB name
                 match = False
                 for db_w in db_card_words:
                     if db_w in pay_card_name:
@@ -87,7 +82,7 @@ def migrate_excel_to_sqlite(excel_path: str):
         
         print(f"Successfully migrated {migrated_payments} payments.")
 
-        # 6. Migrate Lendings
+        # 7. Migrate Lendings
         print("Migrating Lendings...")
         for lend in data.get('active_lendings', []):
             due_date = None
@@ -103,7 +98,7 @@ def migrate_excel_to_sqlite(excel_path: str):
                 due_date=due_date
             ))
 
-        # 7. Migrate EMIs
+        # 8. Migrate EMIs
         print("Migrating EMIs...")
         for emi in data.get('active_emis', []):
             session.add(Loan(
@@ -112,7 +107,7 @@ def migrate_excel_to_sqlite(excel_path: str):
                 months_left=str(emi['remaining'])
             ))
 
-        # 8. Migrate Incomes
+        # 9. Migrate Incomes
         print("Migrating Incomes...")
         for inc in data.get('incomes', []):
             session.add(Income(
