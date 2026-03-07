@@ -1,23 +1,26 @@
 import os
 import shutil
-import pandas as pd
 from datetime import datetime
-from fastapi import FastAPI, Request, UploadFile, File, Form
+from typing import List, Dict, Any, Optional
+
+import pandas as pd
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import List, Dict, Any
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
-
-# Temporary storage for the uploaded file path
-# In a real app, this would be session-based or in a DB
+# --- Constants & Configuration ---
 UPLOAD_DIR = "temp_uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 TEMP_FILE_PATH = os.path.join(UPLOAD_DIR, "latest_finance.xlsx")
 
-def clean_currency(value):
-    """Directly convert to float, assuming no currency symbols."""
+app = FastAPI(title="Finance Dashboard")
+templates = Jinja2Templates(directory="templates")
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+# --- Utility Functions ---
+def clean_currency(value: Any) -> float:
+    """Safely converts a value to a float for currency representation."""
     if pd.isna(value) or value == "":
         return 0.0
     try:
@@ -25,208 +28,271 @@ def clean_currency(value):
     except (ValueError, TypeError):
         return 0.0
 
-def format_date(value):
-    """Handle datetime objects or strings."""
+
+def format_date(value: Any) -> str:
+    """Formats a date value into a YYYY-MM-DD string."""
     if pd.isna(value):
         return "N/A"
     if isinstance(value, datetime):
         return value.strftime('%Y-%m-%d')
     return str(value)
 
-def parse_excel(file_path: str) -> Dict[str, Any]:
-    excel = pd.ExcelFile(file_path)
-    data = {}
 
-    # 1. Incomes
-    df_incomes = pd_read_sheet(excel, "Incomes")
-    incomes_summary = []
-    if not df_incomes.empty:
-        for _, row in df_incomes.dropna(subset=['Amount']).iterrows():
-            incomes_summary.append({
-                "month": str(row.get('Date Of Credit', 'N/A')),
-                "amount": clean_currency(row.get('Amount', 0)),
-                "source": str(row.get('Source', 'N/A'))
-            })
-    data['incomes'] = incomes_summary
+# --- Core Logic: FinanceParser ---
+class FinanceParser:
+    """
+    Parses a specifically formatted Excel file to extract financial data
+    for the dashboard.
+    """
 
-    # 2. Credit Card Utilisation (Parsed from Net Worth sheet)
-    df_nw = pd_read_sheet(excel, "Net Worth")
-    cc_data = {}
-    bob_due = 0.0
-    
-    if not df_nw.empty:
-        mode = None
-        for _, row in df_nw.iterrows():
-            label = str(row.iloc[4]).strip() if len(row) > 4 else ""
-            val = clean_currency(row.iloc[5]) if len(row) > 5 else 0
-            
-            if "Credit Card Max Limit" in label:
-                mode = "LIMIT"
-                continue
-            elif "Credit Due" in label:
-                mode = "DUE"
-                continue
-            elif "Credit Available" in label:
-                mode = "AVAIL"
-                continue
-            elif label == "" or "total" in label.lower():
-                mode = None
-                continue
-            
-            if mode == "LIMIT":
-                cc_data.setdefault(label, {"limit": 0, "due": 0})["limit"] = val
-            elif mode == "DUE":
-                cc_data.setdefault(label, {"limit": 0, "due": 0})["due"] = val
-                if "BOB" in label.upper():
-                    bob_due += val
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.excel = pd.ExcelFile(file_path)
 
-    total_cc_due = 0.0
-    total_cc_limit = 0.0
-    cc_utilization = []
-    for name, vals in cc_data.items():
-        limit = vals["limit"]
-        due = vals["due"]
-        total_cc_due += due
-        total_cc_limit += limit
-        util_pct = (due / limit * 100) if limit > 0 else 0
-        cc_utilization.append({
-            "name": name,
-            "due": due,
-            "limit": limit,
-            "available": limit - due,
-            "utilization": round(util_pct, 1)
-        })
-    
-    data['cc_utilization'] = cc_utilization
-    data['bob_due'] = bob_due
-    data['total_cc_due'] = total_cc_due
-    data['total_cc_limit'] = total_cc_limit
-    data['total_cc_utilization'] = round((total_cc_due / total_cc_limit * 100), 1) if total_cc_limit > 0 else 0
+    def _read_sheet(self, sheet_name: str) -> pd.DataFrame:
+        """Safely reads an Excel sheet into a DataFrame."""
+        try:
+            return self.excel.parse(sheet_name)
+        except Exception:
+            return pd.DataFrame()
 
-    # 3. Lendings (Names/Amounts from Net Worth, Dates from Lendings sheet)
-    active_lendings = []
-    total_lent = 0.0
-    
-    # First, get a mapping of Name -> Due Date from the Lendings sheet
-    due_date_map = {}
-    df_lendings_sheet = pd_read_sheet(excel, "Lendings")
-    if not df_lendings_sheet.empty:
-        for _, row in df_lendings_sheet.iterrows():
-            person_name = str(row.get('Lent to', '')).strip().lower()
-            due_date = row.get('Due Date')
-            if person_name and not pd.isna(due_date):
-                due_date_map[person_name] = due_date
+    def parse(self) -> Dict[str, Any]:
+        """Orchestrates the parsing of all sections and returns a combined dictionary."""
+        data = {}
 
-    if not df_nw.empty:
-        # Looking at columns Unnamed: 7 and Unnamed: 8 for Lendings
-        for r_idx, row in df_nw.iterrows():
-            if r_idx == 0: continue # Skip header row 'Lendings'
-            
-            label = str(row.iloc[7]).strip() if len(row) > 7 else ""
-            val = clean_currency(row.iloc[8]) if len(row) > 8 else 0
-            
-            if label == "" or "total" in label.lower() or "nan" == label.lower():
-                continue
-            
-            if "loans" in label.lower():
-                break
+        # Parse sections
+        data['incomes'] = self._parse_incomes()
+        
+        # Credit card logic
+        cc_data = self._parse_credit_cards()
+        data.update(cc_data)
 
-            if val > 0:
-                # Find the due date using the mapping (case-insensitive)
-                raw_due_date = due_date_map.get(label.lower())
-                
-                active_lendings.append({
-                    "person": label,
-                    "amount": val,
-                    "due_date": format_date(raw_due_date) if raw_due_date else "N/A",
-                    "overdue": (raw_due_date < datetime.now() if isinstance(raw_due_date, datetime) else False)
+        # Lendings
+        lendings_data = self._parse_lendings()
+        data.update(lendings_data)
+
+        # EMIs & Payments
+        data['active_emis'] = self._parse_emis()
+        data['payments_history'] = self._parse_payments()
+
+        # Net Worth KPIs
+        kpis = self._parse_net_worth_kpis(data['total_lent'], data['total_cc_due'])
+        data.update(kpis)
+
+        return data
+
+    def _parse_incomes(self) -> List[Dict[str, Any]]:
+        df = self._read_sheet("Incomes")
+        incomes = []
+        if not df.empty:
+            # Drop rows where Amount is missing
+            valid_rows = df.dropna(subset=['Amount'])
+            for _, row in valid_rows.iterrows():
+                incomes.append({
+                    "month": str(row.get('Date Of Credit', 'N/A')),
+                    "amount": clean_currency(row.get('Amount', 0)),
+                    "source": str(row.get('Source', 'N/A'))
                 })
-                total_lent += val
-                
-    data['active_lendings'] = active_lendings
-    data['total_lent'] = total_lent
+        return incomes
 
-    # 4. EMIs
-    df_emis = pd_read_sheet(excel, "EMIs")
-    active_emis = []
-    if not df_emis.empty:
-        for _, row in df_emis.dropna(subset=['Amt Due']).iterrows():
-            if str(row.get('IsClosed', '')).strip().lower() != 'yes':
-                active_emis.append({
-                    "item": str(row.get('Provider', 'Unknown')),
-                    "amount": clean_currency(row.get('Amt Due', 0)),
-                    "remaining": str(row.get('EMIs Remaining', 'N/A'))
-                })
-    data['active_emis'] = active_emis
+    def _parse_credit_cards(self) -> Dict[str, Any]:
+        df_nw = self._read_sheet("Net Worth")
+        cc_raw_data: Dict[str, Dict[str, float]] = {}
+        bob_due = 0.0
 
-    # 6. Credit Card Payments (History)
-    df_payments = pd_read_sheet(excel, "Credit Card Payments")
-    payments_history = []
-    if not df_payments.empty:
-        # Sort by date
-        df_payments['Payment Date'] = pd.to_datetime(df_payments['Payment Date'], errors='coerce')
-        df_payments = df_payments.dropna(subset=['Payment Date']).sort_values('Payment Date')
-        
-        for _, row in df_payments.iterrows():
-            payments_history.append({
-                "date": row['Payment Date'].strftime('%Y-%m-%d'),
-                "amount": clean_currency(row.get('Amount Paid', 0)),
-                "card": str(row.get('Card Name', 'Unknown'))
+        if not df_nw.empty:
+            mode = None
+            for _, row in df_nw.iterrows():
+                # Based on original logic: col 4 is label, col 5 is value
+                label = str(row.iloc[4]).strip() if len(row) > 4 else ""
+                val = clean_currency(row.iloc[5]) if len(row) > 5 else 0
+
+                if "Credit Card Max Limit" in label:
+                    mode = "LIMIT"
+                    continue
+                elif "Credit Due" in label:
+                    mode = "DUE"
+                    continue
+                elif "Credit Available" in label:
+                    mode = "AVAIL"
+                    continue
+                elif label == "" or "total" in label.lower():
+                    mode = None
+                    continue
+
+                if mode == "LIMIT":
+                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0})["limit"] = val
+                elif mode == "DUE":
+                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0})["due"] = val
+                    if "BOB" in label.upper():
+                        bob_due += val
+
+        total_cc_due = 0.0
+        total_cc_limit = 0.0
+        cc_utilization = []
+
+        for name, vals in cc_raw_data.items():
+            limit = vals["limit"]
+            due = vals["due"]
+            total_cc_due += due
+            total_cc_limit += limit
+            util_pct = (due / limit * 100) if limit > 0 else 0
+            
+            cc_utilization.append({
+                "name": name,
+                "due": due,
+                "limit": limit,
+                "available": limit - due,
+                "utilization": round(util_pct, 1)
             })
-    data['payments_history'] = payments_history
 
-    # 5. Net Worth KPIs (Parsed from Net Worth sheet)
-    data.update({"total_cash": 0, "total_savings": 0, "net_worth": 0})
-    if not df_nw.empty:
-        # Based on inspection: 
-        # Cash total is in Unnamed: 2 (index 2) where Unnamed: 1 (index 1) is 'total'
-        # First 'total' is Cash, second is Savings
-        totals_found = []
-        for r_idx, row in df_nw.iterrows():
-            label = str(row.iloc[1]).lower() if len(row) > 1 else ""
-            val = clean_currency(row.iloc[2]) if len(row) > 2 else 0
-            if label == "total" and val > 0:
-                totals_found.append(val)
-        
-        if len(totals_found) >= 1: data['total_cash'] = totals_found[0]
-        if len(totals_found) >= 2: data['total_savings'] = totals_found[1]
-        
-    # Final Net Worth Calculation
-    data['net_worth'] = (data['total_cash'] + data['total_savings'] + 
-                         data['total_lent'] - data['total_cc_due'])
+        total_util_pct = (total_cc_due / total_cc_limit * 100) if total_cc_limit > 0 else 0
 
-    return data
+        return {
+            'cc_utilization': cc_utilization,
+            'bob_due': bob_due,
+            'total_cc_due': total_cc_due,
+            'total_cc_limit': total_cc_limit,
+            'total_cc_utilization': round(total_util_pct, 1)
+        }
 
-def pd_read_sheet(excel_obj, sheet_name):
-    """Helper to read sheet safely."""
-    try:
-        return excel_obj.parse(sheet_name)
-    except:
-        return pd.DataFrame()
+    def _parse_lendings(self) -> Dict[str, Any]:
+        # Map Name -> Due Date from the Lendings sheet
+        due_date_map = {}
+        df_lendings_sheet = self._read_sheet("Lendings")
+        if not df_lendings_sheet.empty:
+            for _, row in df_lendings_sheet.iterrows():
+                person_name = str(row.get('Lent to', '')).strip().lower()
+                due_date = row.get('Due Date')
+                if person_name and not pd.isna(due_date):
+                    due_date_map[person_name] = due_date
 
+        active_lendings = []
+        total_lent = 0.0
+        df_nw = self._read_sheet("Net Worth")
+
+        if not df_nw.empty:
+            # Original logic: columns 7 (label) and 8 (value) for Lendings
+            for r_idx, row in df_nw.iterrows():
+                if r_idx == 0: continue # Skip 'Lendings' header
+
+                label = str(row.iloc[7]).strip() if len(row) > 7 else ""
+                val = clean_currency(row.iloc[8]) if len(row) > 8 else 0
+
+                if label == "" or "total" in label.lower() or label.lower() == "nan":
+                    continue
+                if "loans" in label.lower():
+                    break
+
+                if val > 0:
+                    raw_due_date = due_date_map.get(label.lower())
+                    is_overdue = False
+                    if isinstance(raw_due_date, datetime):
+                        is_overdue = raw_due_date < datetime.now()
+
+                    active_lendings.append({
+                        "person": label,
+                        "amount": val,
+                        "due_date": format_date(raw_due_date),
+                        "overdue": is_overdue
+                    })
+                    total_lent += val
+
+        return {
+            'active_lendings': active_lendings,
+            'total_lent': total_lent
+        }
+
+    def _parse_emis(self) -> List[Dict[str, Any]]:
+        df = self._read_sheet("EMIs")
+        active_emis = []
+        if not df.empty:
+            # Filter rows: must have 'Amt Due' and not be 'IsClosed' == 'yes'
+            valid_emis = df.dropna(subset=['Amt Due'])
+            for _, row in valid_emis.iterrows():
+                if str(row.get('IsClosed', '')).strip().lower() != 'yes':
+                    active_emis.append({
+                        "item": str(row.get('Provider', 'Unknown')),
+                        "amount": clean_currency(row.get('Amt Due', 0)),
+                        "remaining": str(row.get('EMIs Remaining', 'N/A'))
+                    })
+        return active_emis
+
+    def _parse_payments(self) -> List[Dict[str, Any]]:
+        df = self._read_sheet("Credit Card Payments")
+        payments = []
+        if not df.empty:
+            df['Payment Date'] = pd.to_datetime(df['Payment Date'], errors='coerce')
+            df = df.dropna(subset=['Payment Date']).sort_values('Payment Date')
+            
+            for _, row in df.iterrows():
+                payments.append({
+                    "date": row['Payment Date'].strftime('%Y-%m-%d'),
+                    "amount": clean_currency(row.get('Amount Paid', 0)),
+                    "card": str(row.get('Card Name', 'Unknown'))
+                })
+        return payments
+
+    def _parse_net_worth_kpis(self, total_lent: float, total_cc_due: float) -> Dict[str, Any]:
+        df_nw = self._read_sheet("Net Worth")
+        total_cash = 0.0
+        total_savings = 0.0
+
+        if not df_nw.empty:
+            # Based on original inspection: Cash/Savings totals are in col 2 when col 1 is 'total'
+            totals_found = []
+            for _, row in df_nw.iterrows():
+                label = str(row.iloc[1]).lower() if len(row) > 1 else ""
+                val = clean_currency(row.iloc[2]) if len(row) > 2 else 0
+                if label == "total" and val > 0:
+                    totals_found.append(val)
+            
+            if len(totals_found) >= 1: total_cash = totals_found[0]
+            if len(totals_found) >= 2: total_savings = totals_found[1]
+
+        net_worth = total_cash + total_savings + total_lent - total_cc_due
+
+        return {
+            "total_cash": total_cash,
+            "total_savings": total_savings,
+            "net_worth": net_worth
+        }
+
+
+# --- API Routes ---
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("upload.html", {"request": request})
 
+
 @app.post("/upload")
-async def upload_file(request: Request, file: UploadFile = File(...)):
-    with open(TEMP_FILE_PATH, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return RedirectResponse(url="/dashboard", status_code=303)
+async def upload_file(file: UploadFile = File(...)):
+    """Handles Excel file upload and saves it locally."""
+    try:
+        with open(TEMP_FILE_PATH, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        return HTMLResponse(content=f"Upload failed: {str(e)}", status_code=500)
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    """Parses the latest uploaded file and displays the dashboard."""
     if not os.path.exists(TEMP_FILE_PATH):
         return RedirectResponse(url="/")
     
     try:
-        dashboard_data = parse_excel(TEMP_FILE_PATH)
+        parser = FinanceParser(TEMP_FILE_PATH)
+        dashboard_data = parser.parse()
         return templates.TemplateResponse("dashboard.html", {
             "request": request, 
             "data": dashboard_data
         })
     except Exception as e:
-        return HTMLResponse(content=f"Error parsing Excel: {str(e)}", status_code=500)
+        # For production, log the error and show a user-friendly message
+        return HTMLResponse(content=f"Error parsing financial data: {str(e)}", status_code=500)
+
 
 if __name__ == "__main__":
     import uvicorn
