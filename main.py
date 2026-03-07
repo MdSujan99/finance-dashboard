@@ -4,9 +4,12 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 import pandas as pd
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select, func
+
+from models import engine, Account, CreditCard, CCPayment, Lending, Loan, Income
 
 # --- Constants & Configuration ---
 UPLOAD_DIR = "temp_uploads"
@@ -39,14 +42,118 @@ def clean_currency(value: Any) -> float:
 
 def format_date(value: Any) -> str:
     """Formats a date value into a YYYY-MM-DD string."""
-    if pd.isna(value):
+    if pd.isna(value) or value is None:
         return "N/A"
     if isinstance(value, datetime):
         return value.strftime('%Y-%m-%d')
     return str(value)
 
 
-# --- Core Logic: FinanceParser ---
+# --- Core Logic: FinanceService (SQLite) ---
+class FinanceService:
+    """
+    Service layer to fetch financial data from SQLite database.
+    """
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get_dashboard_data(self) -> Dict[str, Any]:
+        """Fetches all data required for the dashboard."""
+        data = {}
+
+        # 1. Accounts (Cash/Savings)
+        accounts = self.session.exec(select(Account)).all()
+        data['total_cash'] = next((a.balance for a in accounts if "Cash" in a.name), 0.0)
+        data['total_savings'] = next((a.balance for a in accounts if "Savings" in a.name), 0.0)
+
+        # 2. Credit Cards
+        cards = self.session.exec(select(CreditCard)).all()
+        total_cc_due = 0.0
+        total_cc_limit = 0.0
+        cc_utilization = []
+        bob_due = 0.0
+
+        for card in cards:
+            total_cc_due += card.current_due
+            total_cc_limit += card.max_limit
+            if "BOB" in card.name.upper():
+                bob_due += card.current_due
+            
+            util_pct = (card.current_due / card.max_limit * 100) if card.max_limit > 0 else 0
+            cc_utilization.append({
+                "name": card.name,
+                "due": card.current_due,
+                "limit": card.max_limit,
+                "available": card.max_limit - card.current_due,
+                "utilization": round(util_pct, 1)
+            })
+        
+        data['cc_utilization'] = cc_utilization
+        data['card_info'] = [{"id": card.id, "name": card.name} for card in cards]
+        data['total_cc_due'] = total_cc_due
+        data['total_cc_limit'] = total_cc_limit
+        data['bob_due'] = bob_due
+        data['total_cc_utilization'] = round((total_cc_due / total_cc_limit * 100), 1) if total_cc_limit > 0 else 0
+
+        # 3. Lendings
+        lendings = self.session.exec(select(Lending)).all()
+        active_lendings = []
+        total_lent = 0.0
+        now = datetime.now()
+
+        for l in lendings:
+            if not l.is_paid:
+                is_overdue = False
+                if l.due_date:
+                    is_overdue = l.due_date < now
+                
+                active_lendings.append({
+                    "person": l.person,
+                    "amount": l.amount,
+                    "due_date": format_date(l.due_date),
+                    "overdue": is_overdue
+                })
+                total_lent += l.amount
+        
+        data['active_lendings'] = active_lendings
+        data['total_lent'] = total_lent
+
+        # 4. EMIs
+        loans = self.session.exec(select(Loan).where(Loan.is_active == True)).all()
+        data['active_emis'] = [{
+            "item": loan.provider,
+            "amount": loan.monthly_emi,
+            "remaining": loan.months_left
+        } for loan in loans]
+
+        # 5. Incomes
+        incomes = self.session.exec(select(Income)).all()
+        data['incomes'] = [{
+            "month": inc.date,
+            "amount": inc.amount,
+            "source": inc.source
+        } for inc in incomes]
+
+        # 6. Payments History
+        payments = self.session.exec(
+            select(CCPayment, CreditCard.name)
+            .join(CreditCard)
+            .order_by(CCPayment.date)
+        ).all()
+        
+        data['payments_history'] = [{
+            "date": p[0].date.strftime('%Y-%m-%d'),
+            "amount": p[0].amount,
+            "card": p[1]
+        } for p in payments]
+
+        # 7. Net Worth
+        data['net_worth'] = data['total_cash'] + data['total_savings'] + data['total_lent'] - data['total_cc_due']
+
+        return data
+
+
+# --- Original Core Logic: FinanceParser (Kept for Migration/Upload fallback) ---
 class FinanceParser:
     """
     Parses a specifically formatted Excel file to extract financial data
@@ -282,31 +389,92 @@ async def home(request: Request):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Handles Excel file upload and saves it locally."""
+    """Handles Excel file upload and triggers a fresh migration."""
     try:
         with open(TEMP_FILE_PATH, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        # Trigger migration from Excel to DB
+        from migrate import migrate_excel_to_sqlite
+        migrate_excel_to_sqlite(TEMP_FILE_PATH)
+        
         return RedirectResponse(url="/dashboard", status_code=303)
     except Exception as e:
-        return HTMLResponse(content=f"Upload failed: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Upload & Migration failed: {str(e)}", status_code=500)
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Parses the latest uploaded file and displays the dashboard."""
-    if not os.path.exists(TEMP_FILE_PATH):
-        return RedirectResponse(url="/")
-    
+    """Fetches dashboard data from SQLite."""
     try:
-        parser = FinanceParser(TEMP_FILE_PATH)
-        dashboard_data = parser.parse()
+        with Session(engine) as session:
+            service = FinanceService(session)
+            dashboard_data = service.get_dashboard_data()
+            
         return templates.TemplateResponse("dashboard.html", {
             "request": request, 
-            "data": dashboard_data
+            "data": dashboard_data,
+            "now_date": datetime.now().strftime('%Y-%m-%d')
         })
     except Exception as e:
-        # For production, log the error and show a user-friendly message
-        return HTMLResponse(content=f"Error parsing financial data: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"Error fetching data from database: {str(e)}", status_code=500)
+
+
+# --- Manual Data Entry Routes ---
+
+@app.post("/add_income")
+async def add_income(source: str = Form(...), amount: float = Form(...), date: str = Form(...)):
+    with Session(engine) as session:
+        session.add(Income(source=source, amount=amount, date=date))
+        session.commit()
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/update_account")
+async def update_account(name: str = Form(...), balance: float = Form(...)):
+    with Session(engine) as session:
+        statement = select(Account).where(Account.name == name)
+        account = session.exec(statement).first()
+        if account:
+            account.balance = balance
+            account.updated_at = datetime.utcnow()
+            session.add(account)
+            session.commit()
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/add_payment")
+async def add_payment(card_id: int = Form(...), amount: float = Form(...), date: str = Form(...)):
+    with Session(engine) as session:
+        session.add(CCPayment(
+            card_id=card_id,
+            amount=amount,
+            date=datetime.strptime(date, '%Y-%m-%d')
+        ))
+        # Update current due on the card automatically
+        statement = select(CreditCard).where(CreditCard.id == card_id)
+        card = session.exec(statement).one()
+        card.current_due -= amount
+        session.add(card)
+        session.commit()
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/add_lending")
+async def add_lending(person: str = Form(...), amount: float = Form(...), due_date: str = Form(...)):
+    with Session(engine) as session:
+        due = datetime.strptime(due_date, '%Y-%m-%d') if due_date else None
+        session.add(Lending(person=person, amount=amount, due_date=due))
+        session.commit()
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/add_emi")
+async def add_emi(provider: str = Form(...), amount: float = Form(...), remaining: str = Form(...)):
+    with Session(engine) as session:
+        session.add(Loan(provider=provider, monthly_emi=amount, months_left=remaining))
+        session.commit()
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 if __name__ == "__main__":
