@@ -86,10 +86,14 @@
 <body>
     <header>
         <h1>Finance Dashboard</h1>
-        <a href="/" class="upload-link">Upload New File</a>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <button onclick="downloadSnapshot()" class="upload-link" style="background: none; cursor: pointer; font-family: inherit;">Download Snapshot (PDF)</button>
+            <a href="/" class="upload-link">Upload New File</a>
+        </div>
     </header>
 
-    <div class="kpi-grid">
+    <div id="dashboard-content">
+        <div class="kpi-grid">
         <div class="kpi-card">
             <div class="kpi-label">Total Cash</div>
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_cash) }}</div>
@@ -246,7 +250,7 @@
             <p style="color: var(--text-dim)">No income history found.</p>
             {% endif %}
         </div>
-    </div>
+    </div> <!-- Close dashboard-content -->
 
     <div class="section" style="margin-top: 2rem;">
         <h2 style="margin-bottom: 1.5rem;">Manage Financial Data</h2>
@@ -305,7 +309,49 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
+        async function downloadSnapshot() {
+            const btn = document.querySelector('button[onclick="downloadSnapshot()"]');
+            const originalText = btn.innerText;
+            btn.innerText = "Generating Snapshot...";
+            btn.disabled = true;
+
+            try {
+                const element = document.getElementById('dashboard-content');
+                // Temporarily adjust padding/layout for cleaner capture
+                const originalPadding = document.body.style.padding;
+                document.body.style.padding = "1rem";
+                
+                const canvas = await html2canvas(element, {
+                    scale: 2, // Higher resolution
+                    useCORS: true,
+                    backgroundColor: "#f5f5dc" // Matches var(--bg-color)
+                });
+                
+                document.body.style.padding = originalPadding;
+                
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'px',
+                    format: [canvas.width / 2, canvas.height / 2] // Scale back down for standard size
+                });
+                
+                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+                const timestamp = new Date().toISOString().split('T')[0];
+                pdf.save(`finance-snapshot-${timestamp}.pdf`);
+            } catch (err) {
+                console.error("PDF generation failed:", err);
+                alert("Could not generate PDF. Check console for details.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
         const rawPayments = [
             {% for p in data.payments_history %}
             { date: "{{ p.date }}", amount: {{ p.amount }}, card: "{{ p.card }}" },
