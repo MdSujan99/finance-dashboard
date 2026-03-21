@@ -36,7 +36,8 @@ def migrate_excel_to_sqlite(excel_path: str):
             cc = CreditCard(
                 name=cc_data['name'],
                 max_limit=cc_data['limit'],
-                current_due=cc_data['due']
+                current_due=cc_data['due'],
+                available_limit=cc_data['available']
             )
             session.add(cc)
             session.flush() # Get the ID

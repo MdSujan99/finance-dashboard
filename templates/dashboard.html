@@ -99,8 +99,11 @@
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_savings) }}</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Total Credit Due</div>
-            <div class="kpi-value money" style="color: var(--danger)">{{ "{:,.0f}".format(data.total_cc_due) }}</div>
+            <div class="kpi-label">Total Credit Used</div>
+            <div class="kpi-value money" style="color: var(--danger)">{{ "{:,.0f}".format(data.total_actual_used) }}</div>
+            <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.2rem;">
+                Billed Due: {{ "{:,.0f}".format(data.total_cc_due) }}
+            </div>
         </div>
         <div class="kpi-card">
             <div class="kpi-label">Money Lent Out</div>
@@ -148,7 +151,9 @@
                 <thead>
                     <tr>
                         <th>Card</th>
-                        <th>Due / Limit</th>
+                        <th>Billed Due</th>
+                        <th>Unbilled / EMIs</th>
+                        <th>Total Used / Limit</th>
                         <th>Util %</th>
                     </tr>
                 </thead>
@@ -156,7 +161,9 @@
                     {% for cc in data.cc_utilization %}
                     <tr>
                         <td>{{ cc.name }}</td>
-                        <td>{{ "{:,.0f}".format(cc.due) }} / {{ "{:,.0f}".format(cc.limit) }}</td>
+                        <td>{{ "{:,.0f}".format(cc.due) }}</td>
+                        <td style="color: var(--text-dim)">+ {{ "{:,.0f}".format(cc.unbilled) }}</td>
+                        <td style="font-weight: 500;">{{ "{:,.0f}".format(cc.total_used) }} / {{ "{:,.0f}".format(cc.limit) }}</td>
                         <td>
                             {{ cc.utilization }}%
                             <div class="util-bar-bg">
@@ -169,7 +176,9 @@
                 <tfoot>
                     <tr style="font-weight: bold; background: rgba(0,0,0,0.05);">
                         <td>TOTAL</td>
-                        <td>{{ "{:,.0f}".format(data.total_cc_due) }} / {{ "{:,.0f}".format(data.total_cc_limit) }}</td>
+                        <td>{{ "{:,.0f}".format(data.total_cc_due) }}</td>
+                        <td style="color: var(--text-dim)">+ {{ "{:,.0f}".format(data.total_actual_used - data.total_cc_due) }}</td>
+                        <td>{{ "{:,.0f}".format(data.total_actual_used) }} / {{ "{:,.0f}".format(data.total_cc_limit) }}</td>
                         <td>
                             {{ data.total_cc_utilization }}%
                             <div class="util-bar-bg">

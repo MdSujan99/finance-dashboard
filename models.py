@@ -20,6 +20,7 @@ class CreditCard(SQLModel, table=True):
     name: str
     max_limit: float
     current_due: float
+    available_limit: float = Field(default=0.0)
     payments: List["CCPayment"] = Relationship(back_populates="card")
 
 class CCPayment(SQLModel, table=True):

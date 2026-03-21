@@ -70,21 +70,31 @@ class FinanceService:
         cards = self.session.exec(select(CreditCard)).all()
         total_cc_due = 0.0
         total_cc_limit = 0.0
+        total_actual_used = 0.0
         cc_utilization = []
         bob_due = 0.0
 
         for card in cards:
             total_cc_due += card.current_due
             total_cc_limit += card.max_limit
+            
+            # Actual used includes unbilled and EMIs
+            # limit - available = total used
+            # If available is 0, we fallback to current_due
+            actual_used = card.max_limit - card.available_limit if card.available_limit > 0 else card.current_due
+            total_actual_used += actual_used
+
             if "BOB" in card.name.upper():
                 bob_due += card.current_due
             
-            util_pct = (card.current_due / card.max_limit * 100) if card.max_limit > 0 else 0
+            util_pct = (actual_used / card.max_limit * 100) if card.max_limit > 0 else 0
             cc_utilization.append({
                 "name": card.name,
                 "due": card.current_due,
+                "unbilled": actual_used - card.current_due,
+                "total_used": actual_used,
                 "limit": card.max_limit,
-                "available": card.max_limit - card.current_due,
+                "available": card.available_limit,
                 "utilization": round(util_pct, 1)
             })
         
@@ -92,8 +102,9 @@ class FinanceService:
         data['card_info'] = [{"id": card.id, "name": card.name} for card in cards]
         data['total_cc_due'] = total_cc_due
         data['total_cc_limit'] = total_cc_limit
+        data['total_actual_used'] = total_actual_used
         data['bob_due'] = bob_due
-        data['total_cc_utilization'] = round((total_cc_due / total_cc_limit * 100), 1) if total_cc_limit > 0 else 0
+        data['total_cc_utilization'] = round((total_actual_used / total_cc_limit * 100), 1) if total_cc_limit > 0 else 0
 
         # 3. Lendings
         lendings = self.session.exec(select(Lending)).all()
@@ -148,7 +159,7 @@ class FinanceService:
         } for p in payments]
 
         # 7. Net Worth
-        data['net_worth'] = data['total_cash'] + data['total_savings'] + data['total_lent'] - data['total_cc_due']
+        data['net_worth'] = data['total_cash'] + data['total_savings'] + data['total_lent'] - data['total_actual_used']
 
         return data
 
@@ -191,7 +202,7 @@ class FinanceParser:
         data['payments_history'] = self._parse_payments()
 
         # Net Worth KPIs
-        kpis = self._parse_net_worth_kpis(data['total_lent'], data['total_cc_due'])
+        kpis = self._parse_net_worth_kpis(data['total_lent'], data['total_actual_used'])
         data.update(kpis)
 
         return data
@@ -236,38 +247,49 @@ class FinanceParser:
                     continue
 
                 if mode == "LIMIT":
-                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0})["limit"] = val
+                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0, "available": 0})["limit"] = val
                 elif mode == "DUE":
-                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0})["due"] = val
+                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0, "available": 0})["due"] = val
                     if "BOB" in label.upper():
                         bob_due += val
+                elif mode == "AVAIL":
+                    cc_raw_data.setdefault(label, {"limit": 0, "due": 0, "available": 0})["available"] = val
 
         total_cc_due = 0.0
         total_cc_limit = 0.0
+        total_actual_used = 0.0
         cc_utilization = []
 
         for name, vals in cc_raw_data.items():
             limit = vals["limit"]
             due = vals["due"]
+            available = vals["available"]
             total_cc_due += due
             total_cc_limit += limit
-            util_pct = (due / limit * 100) if limit > 0 else 0
+            
+            actual_used = limit - available if available > 0 else due
+            total_actual_used += actual_used
+            
+            util_pct = (actual_used / limit * 100) if limit > 0 else 0
             
             cc_utilization.append({
                 "name": name,
                 "due": due,
+                "unbilled": actual_used - due,
+                "total_used": actual_used,
                 "limit": limit,
-                "available": limit - due,
+                "available": available,
                 "utilization": round(util_pct, 1)
             })
 
-        total_util_pct = (total_cc_due / total_cc_limit * 100) if total_cc_limit > 0 else 0
+        total_util_pct = (total_actual_used / total_cc_limit * 100) if total_cc_limit > 0 else 0
 
         return {
             'cc_utilization': cc_utilization,
             'bob_due': bob_due,
             'total_cc_due': total_cc_due,
             'total_cc_limit': total_cc_limit,
+            'total_actual_used': total_actual_used,
             'total_cc_utilization': round(total_util_pct, 1)
         }
 
@@ -355,7 +377,7 @@ class FinanceParser:
                 })
         return payments
 
-    def _parse_net_worth_kpis(self, total_lent: float, total_cc_due: float) -> Dict[str, Any]:
+    def _parse_net_worth_kpis(self, total_lent: float, total_actual_used: float) -> Dict[str, Any]:
         df_nw = self._read_sheet("Net Worth")
         total_cash = 0.0
         total_savings = 0.0
@@ -372,7 +394,7 @@ class FinanceParser:
             if len(totals_found) >= 1: total_cash = totals_found[0]
             if len(totals_found) >= 2: total_savings = totals_found[1]
 
-        net_worth = total_cash + total_savings + total_lent - total_cc_due
+        net_worth = total_cash + total_savings + total_lent - total_actual_used
 
         return {
             "total_cash": total_cash,
@@ -451,10 +473,11 @@ async def add_payment(card_id: int = Form(...), amount: float = Form(...), date:
             amount=amount,
             date=datetime.strptime(date, '%Y-%m-%d')
         ))
-        # Update current due on the card automatically
+        # Update current due and available limit on the card automatically
         statement = select(CreditCard).where(CreditCard.id == card_id)
         card = session.exec(statement).one()
         card.current_due -= amount
+        card.available_limit += amount
         session.add(card)
         session.commit()
     return RedirectResponse(url="/dashboard", status_code=303)
