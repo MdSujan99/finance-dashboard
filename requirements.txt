@@ -1,6 +1,12 @@
 fastapi
-uvicorn
-jinja2
-python-multipart
+sqlmodel
+psycopg2-binary
+python-dotenv
 pandas
 openpyxl
+streamlit
+plotly
+altair
+numpy
+uvicorn
+python-multipart
