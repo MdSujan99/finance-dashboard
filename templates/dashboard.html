@@ -81,19 +81,35 @@
         .util-bar-fill { background: var(--success); height: 100%; }
         .high-util { background: var(--danger) !important; }
 
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+            .kpi-grid { grid-template-columns: 1fr; }
+            .section { padding: 1rem; overflow-x: auto; }
+            table { min-width: 400px; } /* Ensure tables don't squash too much */
+        }
+
+        /* Print Styles */
+        @media print {
+            body { background: white; padding: 0; }
+            .upload-link, .section:last-of-type, #manage-toggle-icon { display: none !important; }
+            .section { border: none; padding: 0; margin-bottom: 2rem; }
+            .kpi-card { break-inside: avoid; border: 1px solid #eee; }
+            .section-grid { display: block; }
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Finance Dashboard</h1>
-        <div style="display: flex; gap: 1rem; align-items: center;">
-            <button onclick="downloadSnapshot()" class="upload-link" style="background: none; cursor: pointer; font-family: inherit;">Download Snapshot (PDF)</button>
-            <a href="/" class="upload-link">Upload New File</a>
+        <div>
+            <h1>Finance Dashboard</h1>
+            <p id="snapshot-timestamp" style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.2rem;"></p>
         </div>
+        <a href="/" class="upload-link">Upload New File</a>
     </header>
 
-    <div id="dashboard-content">
-        <div class="kpi-grid">
+    <div class="kpi-grid">
         <div class="kpi-card">
             <div class="kpi-label">Total Cash</div>
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_cash) }}</div>
@@ -252,7 +268,7 @@
             <p style="color: var(--text-dim)">No income history found.</p>
             {% endif %}
         </div>
-    </div> <!-- Close dashboard-content -->
+    </div>
 
     <div class="section" style="margin-top: 2rem;">
         <h2 style="margin-bottom: 1.5rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleManageSection()">
@@ -314,49 +330,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
-        async function downloadSnapshot() {
-            const btn = document.querySelector('button[onclick="downloadSnapshot()"]');
-            const originalText = btn.innerText;
-            btn.innerText = "Generating Snapshot...";
-            btn.disabled = true;
-
-            try {
-                const element = document.getElementById('dashboard-content');
-                // Temporarily adjust padding/layout for cleaner capture
-                const originalPadding = document.body.style.padding;
-                document.body.style.padding = "1rem";
-                
-                const canvas = await html2canvas(element, {
-                    scale: 2, // Higher resolution
-                    useCORS: true,
-                    backgroundColor: "#f5f5dc" // Matches var(--bg-color)
-                });
-                
-                document.body.style.padding = originalPadding;
-                
-                const imgData = canvas.toDataURL('image/png');
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: 'portrait',
-                    unit: 'px',
-                    format: [canvas.width / 2, canvas.height / 2] // Scale back down for standard size
-                });
-                
-                pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
-                const timestamp = new Date().toISOString().split('T')[0];
-                pdf.save(`finance-snapshot-${timestamp}.pdf`);
-            } catch (err) {
-                console.error("PDF generation failed:", err);
-                alert("Could not generate PDF. Check console for details.");
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }
-        }
-
         const rawPayments = [
             {% for p in data.payments_history %}
             { date: "{{ p.date }}", amount: {{ p.amount }}, card: "{{ p.card }}" },
@@ -450,6 +424,35 @@
         select.addEventListener('change', (e) => {
             updateChart(e.target.value);
         });
+
+        // Populate and update snapshot timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const ts = `${year}-${month}-${day} ${hours}:${minutes}`;
+            document.getElementById('snapshot-timestamp').innerText = `Snapshot Date: ${ts}`;
+            return `${year}-${month}-${day}_${hours}-${minutes}`;
+        }
+
+        // Initial populate
+        updateTimestamp();
+
+        // Update title for Print to PDF filename
+        window.onbeforeprint = () => {
+            const tsFile = updateTimestamp();
+            document.originalTitle = document.title;
+            // Setting a descriptive filename with .pdf suffix
+            document.title = `Financial_Snapshot_${tsFile}.pdf`;
+        };
+        window.onafterprint = () => {
+            if (document.originalTitle) {
+                document.title = document.originalTitle;
+            }
+        };
 
         function toggleManageSection() {
             const content = document.getElementById('manage-section-content');
