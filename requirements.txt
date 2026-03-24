@@ -4,9 +4,9 @@ psycopg2-binary
 python-dotenv
 pandas
 openpyxl
-streamlit
+streamlit>=1.31.0
 plotly
-altair
+altair<5
 numpy
 uvicorn
 python-multipart
