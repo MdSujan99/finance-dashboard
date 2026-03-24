@@ -1,14 +1,16 @@
 import pandas as pd
 import os
+import sqlite3
+from database import DB_NAME, load_table
 
 class DataLoader:
-    def __init__(self, file_path="latest_finance.xlsx"):
-        self.file_path = file_path
+    def __init__(self, excel_file_path="latest_finance.xlsx"):
+        self.excel_file_path = excel_file_path
         
     def load_excel(self):
         # Look for files in root and temp_uploads
-        root_path = self.file_path
-        temp_path = os.path.join("temp_uploads", self.file_path)
+        root_path = self.excel_file_path
+        temp_path = os.path.join("temp_uploads", self.excel_file_path)
         
         candidates = []
         if os.path.exists(root_path):
@@ -37,14 +39,14 @@ class DataLoader:
 
     def get_sheet_data(self, excel, sheet_name):
         try:
-            if sheet_name not in excel.sheet_names:
+            if excel is None or sheet_name not in excel.sheet_names:
                 return pd.DataFrame()
             df = excel.parse(sheet_name)
             # Standard cleanup for most sheets
             amount_cols = ['Amount', 'Balance', 'Current Balance', 'Max Limit', 
                            'Amount Outstanding', 'EMI Amount', 'Expected Cost', 'Amt Due', 
                            'Amount Lent', 'Amount Due', 'Budget', 'Actual Cost', 
-                           'Amount Paid', 'Monthly Amount']
+                           'Amount Paid', 'Monthly Amount', 'Net Worth']
             for col in amount_cols:
                 if col in df.columns:
                     df[col] = df[col].apply(self._clean_currency)
@@ -54,6 +56,13 @@ class DataLoader:
 
     def _parse_net_worth_details(self, excel):
         """Specially parses the 'Net Worth' sheet due to its non-standard tabular format."""
+        if excel is None:
+            return {
+                "credit_cards_df": pd.DataFrame(),
+                "net_worth_df": pd.DataFrame(),
+                "lendings_nw_df": pd.DataFrame()
+            }
+            
         df = excel.parse('Net Worth')
         
         cc_raw_data = {}
@@ -107,21 +116,84 @@ class DataLoader:
         }
 
     def get_all_data(self):
+        # 1. Load from SQLite first
+        if not os.path.exists(DB_NAME):
+            # If DB doesn't exist, we might still want to load from Excel
+            # But the requirement says SQLite is primary.
+            pass
+            
+        sqlite_expenses = load_table("expenses") if os.path.exists(DB_NAME) else pd.DataFrame()
+        sqlite_cc_payments = load_table("credit_card_payments") if os.path.exists(DB_NAME) else pd.DataFrame()
+        sqlite_lending = load_table("lending") if os.path.exists(DB_NAME) else pd.DataFrame()
+        sqlite_income = load_table("income") if os.path.exists(DB_NAME) else pd.DataFrame()
+
+        # 2. Load from Excel for fallback/migration data
         excel = self.load_excel()
-        if excel is None: return None
-        
         nw_details = self._parse_net_worth_details(excel)
         
-        # Load all sheets including new Fixed Expenses
-        return {
-            "incomes": self.get_sheet_data(excel, 'Incomes'),
+        excel_incomes = self.get_sheet_data(excel, 'Incomes')
+        excel_payments = self.get_sheet_data(excel, 'Credit Card Payments')
+        excel_lendings = self.get_sheet_data(excel, 'Lendings')
+        
+        # Merge or prioritize SQLite data
+        # For Incomes: combine both or prioritize SQLite? 
+        # Requirement: "Modify the existing dashboard so calculations pull data from the SQLite database instead of Excel."
+        # This suggests SQLite is the source of truth.
+        
+        # Prepare data dictionary in the format calculations.py expects
+        data = {
+            "incomes": self._format_income(sqlite_income, excel_incomes),
             "fixed_expenses": self.get_sheet_data(excel, 'Fixed Expenses'),
+            "nw_history": self.get_sheet_data(excel, 'Net Worth History'),
             "credit_cards": nw_details["credit_cards_df"],
-            "payments": self.get_sheet_data(excel, 'Credit Card Payments'),
-            "lendings": self.get_sheet_data(excel, 'Lendings'),
+            "payments": self._format_cc_payments(sqlite_cc_payments, excel_payments),
+            "lendings": self._format_lendings(sqlite_lending, excel_lendings),
             "lendings_nw": nw_details["lendings_nw_df"],
             "emis": self.get_sheet_data(excel, 'EMIs'),
             "wishlist": self.get_sheet_data(excel, 'Wishlist'),
             "net_worth": nw_details["net_worth_df"],
-            "loans": self.get_sheet_data(excel, 'Loans')
+            "loans": self.get_sheet_data(excel, 'Loans'),
+            "expenses": sqlite_expenses # New key for all expenses
         }
+        
+        return data
+
+    def _format_income(self, sqlite_df, excel_df):
+        # SQLite columns: date, source, amount
+        # Excel columns: Date Of Credit, Amount, Source
+        if sqlite_df.empty:
+            return excel_df
+        
+        # Convert SQLite to match Excel structure if needed by calculations
+        # calculations.py uses: total_income = incomes['Amount'].sum()
+        # So we just need an 'Amount' column.
+        
+        res = sqlite_df.rename(columns={'source': 'Source', 'amount': 'Amount', 'date': 'Date Of Credit'})
+        # Combine if desired, but user said "instead of Excel"
+        return res
+
+    def _format_cc_payments(self, sqlite_df, excel_df):
+        # SQLite: date, card_name, amount
+        # Excel: Payment Date, Card Name, Amount Paid
+        if sqlite_df.empty:
+            return excel_df
+        
+        res = sqlite_df.rename(columns={'date': 'Payment Date', 'card_name': 'Card Name', 'amount': 'Amount Paid'})
+        res['Payment Date'] = pd.to_datetime(res['Payment Date'])
+        return res
+
+    def _format_lendings(self, sqlite_df, excel_df):
+        # SQLite: date, borrower, amount, due_date, status
+        # Excel: Lent to, Amount Lent, Amount Due, Due Date, isCleared
+        if sqlite_df.empty:
+            return excel_df
+        
+        res = sqlite_df.rename(columns={
+            'borrower': 'Lent to', 
+            'amount': 'Amount Lent', 
+            'date': 'Date',
+            'due_date': 'Due Date'
+        })
+        res['isCleared'] = res['status'].apply(lambda x: 'Yes' if x == 'Cleared' else 'No')
+        res['Amount Due'] = res['Amount Lent'] # Assuming full amount due if not cleared
+        return res

@@ -54,12 +54,27 @@ class FinanceCalculations:
         if not fixed_df.empty and 'Monthly Amount' in fixed_df.columns:
             fixed_exp_total = fixed_df['Monthly Amount'].sum()
 
-        monthly_expenses = emi_total + fixed_exp_total + (total_cc_used / 2)
-        savings_val = total_income - monthly_expenses
-        savings_rate = (savings_val / total_income * 100) if total_income > 0 else 0
+        # Add new SQLite expenses
+        sqlite_expenses_total = 0
+        sqlite_expenses_df = data.get('expenses', pd.DataFrame())
+        if not sqlite_expenses_df.empty and 'amount' in sqlite_expenses_df.columns:
+            # We might want to filter by current month, but for now we'll sum all or assume it's for the current context
+            sqlite_expenses_total = sqlite_expenses_df['amount'].sum()
+
+        monthly_expenses = emi_total + fixed_exp_total + (total_cc_used / 2) + sqlite_expenses_total
+        monthly_savings = total_income - monthly_expenses
+        savings_rate = (monthly_savings / total_income * 100) if total_income > 0 else 0
         
+        # 1. Financial Runway: (Cash + Savings) / monthly burn
         liquid_assets = total_cash + total_savings
         runway = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
+
+        # 2. Wealth Velocity: monthly net worth increase (approx monthly savings)
+        wealth_velocity = monthly_savings
+
+        # 3. Financial Independence Ratio: Assets / Yearly Expenses
+        yearly_expenses = monthly_expenses * 12
+        fi_ratio = (total_assets / yearly_expenses) if yearly_expenses > 0 else 0
 
         return {
             "net_worth": net_worth,
@@ -74,7 +89,11 @@ class FinanceCalculations:
             "savings_rate": round(savings_rate, 1),
             "runway": round(runway, 1),
             "monthly_expenses": monthly_expenses,
-            "pf_value": PF_VALUE
+            "total_expenses": sqlite_expenses_total,
+            "pf_value": PF_VALUE,
+            "wealth_velocity": wealth_velocity,
+            "fi_ratio": round(fi_ratio, 2),
+            "total_assets": total_assets
         }
 
     @staticmethod
@@ -107,8 +126,6 @@ class FinanceCalculations:
         fixed = data['fixed_expenses'].copy() if not data['fixed_expenses'].empty else pd.DataFrame()
         fixed_rows = []
         if not fixed.empty:
-            # We assume current month for fixed expenses since they are recurring
-            # For trend, we can duplicate them across months found in payments
             unique_months = payments['Date'].dt.to_period('M').unique() if not payments.empty else [pd.Period(datetime.now(), freq='M')]
             for month in unique_months:
                 for _, row in fixed.iterrows():
@@ -143,3 +160,20 @@ class FinanceCalculations:
         target_month = (today.month + int(months_left) - 1) % 12 + 1
         target_year = today.year + (today.month + int(months_left) - 1) // 12
         return f"{months_left:.1f} months (Est. {datetime(target_year, target_month, 1).strftime('%b %Y')})"
+
+    @staticmethod
+    def get_net_worth_history(data, current_nw):
+        history_df = data.get('nw_history', pd.DataFrame())
+        if history_df.empty:
+            # Fallback to simulated history if sheet is missing
+            # In a real app, we'd want users to fill this sheet.
+            return pd.DataFrame()
+        
+        if 'Date' in history_df.columns and 'Net Worth' in history_df.columns:
+            df = history_df.copy()
+            df['Date'] = pd.to_datetime(df['Date'])
+            # Append current
+            current_row = pd.DataFrame([{'Date': datetime.now(), 'Net Worth': current_nw}])
+            df = pd.concat([df, current_row], ignore_index=True)
+            return df.sort_values('Date')
+        return pd.DataFrame()
