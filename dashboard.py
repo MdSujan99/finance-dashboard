@@ -13,38 +13,43 @@ from database import init_db, add_expense, add_cc_payment, add_lending, add_inco
 # --- Config & Style ---
 st.set_page_config(page_title="Financial Intelligence Dashboard", layout="wide")
 
+EXPLANATIONS = {
+    "Net Worth": "Total Net Worth = (Assets) - (Liabilities). Assets: Cash, Savings, PF, Lent Money. Liabilities: Credit Card Owed, Active Loans.",
+    "Wealth Velocity": "Rate of wealth accumulation per month. Formula: Monthly Income - Monthly Burn.",
+    "FI Ratio": "Financial Independence Ratio: Total Assets / Annual Expenses. Shows how many years of expenses your assets can cover.",
+    "Runway": "How many months you can survive on liquid assets (Cash + Savings) without any income. Formula: Liquidity / Monthly Burn.",
+    "Savings Rate": "Percentage of income saved. Formula: ((Monthly Income - Monthly Burn) / Monthly Income) * 100.",
+    "Monthly Income": "Total of all income credited to your accounts this month.",
+    "Monthly Burn": "Total monthly outflows: EMIs + Fixed Bills + actual Expenses + (50% of Credit Owed as a buffer).",
+    "Credit Used": "Total amount currently owed to banks across all active credit cards.",
+    "Utilisation": "Credit Card Limit Utilisation. Formula: (Total Owed / Total Limit) * 100. Ideal is < 30%.",
+    "Liquidity": "Immediately accessible funds: Total Cash + Total Savings."
+}
+
 # Initialize DB
 init_db()
 
 # Custom UI Styling (Theme Aware)
 st.markdown("""
     <style>
-    /* Metrics Styling */
-    [data-testid="stMetric"] {
-        background-color: var(--secondary-background-color);
-        border: 1px solid var(--border-color);
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-    }
-    
-    /* Hide sidebar by default on mobile if it still exists */
-    [data-testid="stSidebar"] {
-        display: none;
-    }
-
-    /* Metric Value/Label Colors */
-    [data-testid="stMetricValue"] > div {
-        color: var(--text-color);
-    }
-    [data-testid="stMetricLabel"] > div {
-        color: var(--text-color);
-        opacity: 0.8;
-    }
-    
     /* Global Layout Adjustments */
     .main .block-container {
         padding-top: 1rem;
+    }
+    
+    /* Metrics Styling - Clean White Tiles */
+    [data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e6e9ef !important;
+        padding: 15px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+    }
+
+    /* Neutral dark text for forced white background */
+    [data-testid="stMetricLabel"] > div,
+    [data-testid="stMetricValue"] > div {
+        color: #31333F !important;
     }
     
     /* Large Buttons for Mobile */
@@ -58,7 +63,7 @@ st.markdown("""
         margin-top: 10px;
     }
 
-    /* Tab Styling for multi-line centered labels */
+    /* Tab Styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 5px;
     }
@@ -76,30 +81,28 @@ st.markdown("""
         font-size: 14px;
         line-height: 1.2;
     }
-    .stTabs [data-baseweb="tab"] p {
-        font-size: 14px;
-        margin: 0;
-    }
     </style>
     """, unsafe_allow_html=True)
 
 def show_dashboard(data, metrics):
     st.title("Financial Intelligence 🏦")
     
-    # --- Header Metrics (High Impact) ---
+    # --- Header Metrics ---
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}")
-    col2.metric("Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo")
-    col3.metric("FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs")
-    col4.metric("Runway", f"{metrics.get('runway', 0)} Mo")
-    col5.metric("Savings Rate", f"{metrics.get('savings_rate', 0)}%")
+    col1.metric("💰 Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}", help=EXPLANATIONS["Net Worth"])
+    col2.metric("🚀 Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo", help=EXPLANATIONS["Wealth Velocity"])
+    col3.metric("🏖️ FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs", help=EXPLANATIONS["FI Ratio"])
+    col4.metric("🛫 Runway", f"{metrics.get('runway', 0)} Mo", help=EXPLANATIONS["Runway"])
+    col5.metric("📈 Savings Rate", f"{metrics.get('savings_rate', 0)}%", help=EXPLANATIONS["Savings Rate"])
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
-    m_col1.metric("Monthly Income", f"₹{metrics.get('monthly_income', 0):,.0f}")
-    m_col2.metric("Monthly Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}")
-    m_col3.metric("Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}")
-    m_col4.metric("Utilisation", f"{metrics.get('util_pct', 0)}%")
-    m_col5.metric("Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}")
+    m_col1.metric("💵 Monthly Income", f"₹{metrics.get('monthly_income', 0):,.0f}", help=EXPLANATIONS["Monthly Income"])
+    m_col2.metric("🔥 Monthly Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}", help=EXPLANATIONS["Monthly Burn"])
+    m_col3.metric("💳 Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}", help=EXPLANATIONS["Credit Used"])
+    m_col4.metric("📊 Utilisation", f"{metrics.get('util_pct', 0)}%", help=EXPLANATIONS["Utilisation"])
+    m_col5.metric("💧 Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}", help=EXPLANATIONS["Liquidity"])
 
     st.divider()
 
@@ -238,6 +241,7 @@ def show_lending(data):
         st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], width='stretch')
         
         st.subheader("EMI Obligations")
+        # EXCLUDED_OWNERS defined at top of dashboard.py or calculations.py
         emi_df = data['emis']
         emi_display = emi_df.copy()
         if not emi_display.empty and 'IsClosed' in emi_display.columns:

@@ -3,7 +3,6 @@ from datetime import datetime
 
 # Centralized Configurations
 EXCLUDED_OWNERS = ["Pyaru Mama"]
-PF_VALUE = 420000 
 
 class FinanceCalculations:
     @staticmethod
@@ -33,10 +32,12 @@ class FinanceCalculations:
             active_loans = loans[(loans['Cleared'] == 'No') & (loans['own'] == 'Yes')]
             total_loan_owed = active_loans['Amount Due'].sum()
 
+        pf_value = data.get('pf_value', 0)
+
         nw = data['net_worth']
         total_cash = nw[nw['Category'] == 'Cash']['Balance'].sum() if not nw.empty else 0
         total_savings = nw[nw['Category'] == 'Savings']['Balance'].sum() if not nw.empty else 0
-        total_assets = total_cash + total_savings + total_lent + PF_VALUE
+        total_assets = total_cash + total_savings + total_lent + pf_value
         net_worth = total_assets - total_cc_used - total_loan_owed
 
         emi_total = 0
@@ -58,7 +59,6 @@ class FinanceCalculations:
         sqlite_expenses_total = 0
         sqlite_expenses_df = data.get('expenses', pd.DataFrame())
         if not sqlite_expenses_df.empty and 'amount' in sqlite_expenses_df.columns:
-            # We might want to filter by current month, but for now we'll sum all or assume it's for the current context
             sqlite_expenses_total = sqlite_expenses_df['amount'].sum()
 
         monthly_expenses = emi_total + fixed_exp_total + (total_cc_used / 2) + sqlite_expenses_total
@@ -90,7 +90,7 @@ class FinanceCalculations:
             "runway": round(runway, 1),
             "monthly_expenses": monthly_expenses,
             "total_expenses": sqlite_expenses_total,
-            "pf_value": PF_VALUE,
+            "pf_value": pf_value,
             "wealth_velocity": wealth_velocity,
             "fi_ratio": round(fi_ratio, 2),
             "total_assets": total_assets
@@ -165,14 +165,11 @@ class FinanceCalculations:
     def get_net_worth_history(data, current_nw):
         history_df = data.get('nw_history', pd.DataFrame())
         if history_df.empty:
-            # Fallback to simulated history if sheet is missing
-            # In a real app, we'd want users to fill this sheet.
             return pd.DataFrame()
         
         if 'Date' in history_df.columns and 'Net Worth' in history_df.columns:
             df = history_df.copy()
             df['Date'] = pd.to_datetime(df['Date'])
-            # Append current
             current_row = pd.DataFrame([{'Date': datetime.now(), 'Net Worth': current_nw}])
             df = pd.concat([df, current_row], ignore_index=True)
             return df.sort_values('Date')
