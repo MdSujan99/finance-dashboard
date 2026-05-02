@@ -105,6 +105,8 @@ class FinanceService:
         data['total_actual_used'] = total_actual_used
         data['bob_due'] = bob_due
         data['total_cc_utilization'] = round((total_actual_used / total_cc_limit * 100), 1) if total_cc_limit > 0 else 0
+        data['total_credit_available'] = total_cc_limit - total_actual_used
+        data['total_available_funds'] = data['total_cash'] + data['total_savings'] + data['total_credit_available']
 
         # 3. Lendings
         lendings = self.session.exec(select(Lending)).all()
@@ -160,6 +162,10 @@ class FinanceService:
 
         # 7. Net Worth
         data['net_worth'] = data['total_cash'] + data['total_savings'] + data['total_lent'] - data['total_actual_used']
+
+        # 8. Explanations
+        from calculations import FinanceCalculations
+        data['metric_explanations'] = FinanceCalculations.get_metric_explanations(data)
 
         return data
 

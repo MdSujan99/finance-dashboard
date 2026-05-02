@@ -76,12 +76,17 @@ class FinanceCalculations:
         yearly_expenses = monthly_expenses * 12
         fi_ratio = (total_assets / yearly_expenses) if yearly_expenses > 0 else 0
 
+        total_credit_available = total_cc_limit - total_cc_used
+        total_available_funds = liquid_assets + total_credit_available
+
         return {
             "net_worth": net_worth,
             "total_cash": total_cash,
             "total_savings": total_savings,
             "total_cc_used": total_cc_used,
             "total_cc_limit": total_cc_limit,
+            "total_credit_available": total_credit_available,
+            "total_available_funds": total_available_funds,
             "util_pct": round(util_pct, 1),
             "total_lent": total_lent,
             "total_loan_owed": total_loan_owed,
@@ -94,6 +99,54 @@ class FinanceCalculations:
             "wealth_velocity": wealth_velocity,
             "fi_ratio": round(fi_ratio, 2),
             "total_assets": total_assets
+        }
+
+    @staticmethod
+    def get_metric_explanations(metrics):
+        """Returns detailed strings explaining how each metric was calculated."""
+        liquidity = metrics.get('total_cash', 0) + metrics.get('total_savings', 0)
+        liabilities = metrics.get('total_cc_used', 0) + metrics.get('total_loan_owed', 0)
+        
+        return {
+            "Net Worth": f"Net Worth = Total Assets - Total Liabilities\n"
+                         f"₹{metrics.get('total_assets', 0):,.0f} (Cash + Savings + Lent + PF) - "
+                         f"₹{liabilities:,.0f} (Credit Owed + Loans) = "
+                         f"₹{metrics.get('net_worth', 0):,.0f}",
+            
+            "Wealth Velocity": f"Wealth Velocity = Monthly Income - Monthly Burn\n"
+                               f"₹{metrics.get('monthly_income', 0):,.0f} - ₹{metrics.get('monthly_expenses', 0):,.0f} = "
+                               f"₹{metrics.get('wealth_velocity', 0):,.0f} per month",
+            
+            "FI Ratio": f"FI Ratio = Total Assets / Annual Expenses\n"
+                        f"₹{metrics.get('total_assets', 0):,.0f} / (₹{metrics.get('monthly_expenses', 0):,.0f} × 12) = "
+                        f"{metrics.get('fi_ratio', 0)} years",
+            
+            "Runway": f"Runway = Liquidity / Monthly Burn\n"
+                      f"₹{liquidity:,.0f} / ₹{metrics.get('monthly_expenses', 0):,.0f} = "
+                      f"{metrics.get('runway', 0)} months",
+            
+            "Savings Rate": f"Savings Rate = (Monthly Savings / Monthly Income) × 100\n"
+                            f"(₹{metrics.get('wealth_velocity', 0):,.0f} / ₹{metrics.get('monthly_income', 0):,.0f}) × 100 = "
+                            f"{metrics.get('savings_rate', 0)}%",
+            
+            "Monthly Income": f"Sum of all income records: ₹{metrics.get('monthly_income', 0):,.0f}",
+            
+            "Monthly Burn": f"Monthly Burn = EMIs + Fixed Bills + Expenses + 50% Credit Buffer\n"
+                            f"Total Outflows = ₹{metrics.get('monthly_expenses', 0):,.0f}",
+            
+            "Credit Used": f"Total amount owed across all cards: ₹{metrics.get('total_cc_used', 0):,.0f}",
+            
+            "Utilisation": f"Utilisation = (Total Owed / Total Limit) × 100\n"
+                           f"(₹{metrics.get('total_cc_used', 0):,.0f} / ₹{metrics.get('total_cc_limit', 0):,.0f}) × 100 = "
+                           f"{metrics.get('util_pct', 0)}%",
+            
+            "Liquidity": f"Liquidity = Total Cash + Total Savings\n"
+                         f"₹{metrics.get('total_cash', 0):,.0f} + ₹{metrics.get('total_savings', 0):,.0f} = "
+                         f"₹{liquidity:,.0f}",
+            
+            "Total Available": f"Total Available = Liquidity + Credit Available\n"
+                               f"₹{liquidity:,.0f} + (₹{metrics.get('total_cc_limit', 0):,.0f} - ₹{metrics.get('total_cc_used', 0):,.0f}) = "
+                               f"₹{metrics.get('total_available_funds', 0):,.0f}"
         }
 
     @staticmethod

@@ -13,54 +13,35 @@ from database import init_db, add_expense, add_cc_payment, add_lending, add_inco
 # --- Config & Style ---
 st.set_page_config(page_title="Financial Intelligence Dashboard", layout="wide")
 
-EXPLANATIONS = {
-    "Net Worth": "Total Net Worth = (Assets) - (Liabilities). Assets: Cash, Savings, PF, Lent Money. Liabilities: Credit Card Owed, Active Loans.",
-    "Wealth Velocity": "Rate of wealth accumulation per month. Formula: Monthly Income - Monthly Burn.",
-    "FI Ratio": "Financial Independence Ratio: Total Assets / Annual Expenses. Shows how many years of expenses your assets can cover.",
-    "Runway": "How many months you can survive on liquid assets (Cash + Savings) without any income. Formula: Liquidity / Monthly Burn.",
-    "Savings Rate": "Percentage of income saved. Formula: ((Monthly Income - Monthly Burn) / Monthly Income) * 100.",
-    "Monthly Income": "Total of all income credited to your accounts this month.",
-    "Monthly Burn": "Total monthly outflows: EMIs + Fixed Bills + actual Expenses + (50% of Credit Owed as a buffer).",
-    "Credit Used": "Total amount currently owed to banks across all active credit cards.",
-    "Utilisation": "Credit Card Limit Utilisation. Formula: (Total Owed / Total Limit) * 100. Ideal is < 30%.",
-    "Liquidity": "Immediately accessible funds: Total Cash + Total Savings."
-}
-
 # Initialize DB
 init_db()
 
-# Custom UI Styling (Theme Aware)
+# Custom UI Styling
 st.markdown("""
     <style>
-    /* Global Layout Adjustments */
+    /* Global Layout */
     .main .block-container {
-        padding-top: 1rem;
+        padding-top: 1.5rem;
     }
     
-    /* Metrics Styling - Clean White Tiles */
-    [data-testid="stMetric"] {
-        background-color: #ffffff !important;
-        border: 1px solid #e6e9ef !important;
-        padding: 15px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+    /* Small Button Styling */
+    div[data-testid="stPopover"] > button {
+        border: 1px solid #eee !important;
+        background: #f8f9fa !important;
+        padding: 0px 8px !important;
+        height: 22px !important;
+        width: 22px !important;
+        min-height: unset !important;
+        border-radius: 4px !important;
+        font-size: 12px !important;
+        font-family: serif !important;
+        font-style: italic !important;
     }
 
-    /* Neutral dark text for forced white background */
-    [data-testid="stMetricLabel"] > div,
-    [data-testid="stMetricValue"] > div {
-        color: #31333F !important;
-    }
-    
-    /* Large Buttons for Mobile */
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3.5em;
-        background-color: #007bff;
-        color: white;
-        font-weight: bold;
-        margin-top: 10px;
+    /* Metric Value Styling */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
     }
 
     /* Tab Styling */
@@ -87,22 +68,38 @@ st.markdown("""
 def show_dashboard(data, metrics):
     st.title("Financial Intelligence 🏦")
     
-    # --- Header Metrics ---
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("💰 Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}", help=EXPLANATIONS["Net Worth"])
-    col2.metric("🚀 Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo", help=EXPLANATIONS["Wealth Velocity"])
-    col3.metric("🏖️ FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs", help=EXPLANATIONS["FI Ratio"])
-    col4.metric("🛫 Runway", f"{metrics.get('runway', 0)} Mo", help=EXPLANATIONS["Runway"])
-    col5.metric("📈 Savings Rate", f"{metrics.get('savings_rate', 0)}%", help=EXPLANATIONS["Savings Rate"])
+    explanations = FinanceCalculations.get_metric_explanations(metrics)
+
+    def render_card(label, value, col):
+        with col:
+            with st.container(border=True):
+                # Using columns inside container to place button top-right
+                c1, c2 = st.columns([4, 1])
+                with c1:
+                    st.metric(label, value)
+                with c2:
+                    with st.popover("ƒ", help="Calculation Details"):
+                        st.markdown(f"### {label}")
+                        st.code(explanations.get(label.split(" ", 1)[-1], "No details"), language="text")
+
+    # --- Top Row Metrics ---
+    cols1 = st.columns(5)
+    render_card("💰 Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}", cols1[0])
+    render_card("🚀 Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo", cols1[1])
+    render_card("🏖️ FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs", cols1[2])
+    render_card("🛫 Runway", f"{metrics.get('runway', 0)} Mo", cols1[3])
+    render_card("📈 Savings Rate", f"{metrics.get('savings_rate', 0)}%", cols1[4])
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
-    m_col1.metric("💵 Monthly Income", f"₹{metrics.get('monthly_income', 0):,.0f}", help=EXPLANATIONS["Monthly Income"])
-    m_col2.metric("🔥 Monthly Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}", help=EXPLANATIONS["Monthly Burn"])
-    m_col3.metric("💳 Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}", help=EXPLANATIONS["Credit Used"])
-    m_col4.metric("📊 Utilisation", f"{metrics.get('util_pct', 0)}%", help=EXPLANATIONS["Utilisation"])
-    m_col5.metric("💧 Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}", help=EXPLANATIONS["Liquidity"])
+    # --- Bottom Row Metrics ---
+    cols2 = st.columns(6)
+    render_card("💵 Monthly Income", f"₹{metrics.get('monthly_income', 0):,.0f}", cols2[0])
+    render_card("🔥 Monthly Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}", cols2[1])
+    render_card("💳 Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}", cols2[2])
+    render_card("📊 Utilisation", f"{metrics.get('util_pct', 0)}%", cols2[3])
+    render_card("💧 Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}", cols2[4])
+    render_card("🏦 Total Available", f"₹{metrics.get('total_available_funds', 0):,.0f}", cols2[5])
 
     st.divider()
 
@@ -116,26 +113,26 @@ def show_dashboard(data, metrics):
         
         if not nw_history.empty:
             fig_hist = px.line(nw_history, x='Date', y='Net Worth', markers=True)
-            st.plotly_chart(fig_hist, width='stretch')
+            st.plotly_chart(fig_hist, use_container_width=True)
         else:
             months = np.arange(1, 13)
             monthly_savings = metrics.get('wealth_velocity', 0)
             projection = [metrics.get('net_worth', 0) + (monthly_savings * m) for m in months]
             fig_proj = px.line(x=months, y=projection, markers=True, labels={'x':'Month', 'y':'Net Worth'})
             fig_proj.update_layout(yaxis_tickformat=",.0f")
-            st.plotly_chart(fig_proj, width='stretch')
+            st.plotly_chart(fig_proj, use_container_width=True)
 
         st.subheader("Income vs Expenses")
         cash_flow_df = FinanceCalculations.get_cash_flow_data(metrics, data)
         fig_cf = px.bar(cash_flow_df, x='Category', y='Amount', color='Category', 
                          color_discrete_sequence=['#2ECC71', '#E74C3C', '#3498DB'], text_auto='.2s')
-        st.plotly_chart(fig_cf, width='stretch')
+        st.plotly_chart(fig_cf, use_container_width=True)
 
     with right_col:
         st.subheader("Asset Allocation")
         asset_df = FinanceCalculations.get_asset_allocation(metrics, data)
         fig_pie = px.pie(asset_df, values='Balance', names='Asset', hole=.4, color_discrete_sequence=px.colors.qualitative.T10)
-        st.plotly_chart(fig_pie, width='stretch')
+        st.plotly_chart(fig_pie, use_container_width=True)
 
         st.subheader("Credit Health")
         fig_gauge = go.Figure(go.Indicator(
@@ -147,7 +144,7 @@ def show_dashboard(data, metrics):
                 'steps' : [{'range': [0, 30], 'color': "rgba(46, 204, 113, 0.2)"}, {'range': [30, 70], 'color': "rgba(241, 196, 15, 0.2)"}, {'range': [70, 100], 'color': "rgba(231, 76, 60, 0.2)"}]
             }
         ))
-        st.plotly_chart(fig_gauge, width='stretch')
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
 def show_trends(data):
     st.title("Bill & Payment Trends 📈")
@@ -174,10 +171,10 @@ def show_trends(data):
             tooltip=['ExactDate', 'Category', 'Amount', 'Type']
         ).properties(height=450).interactive()
         
-        st.altair_chart(chart, width='stretch')
+        st.altair_chart(chart, use_container_width=True)
         
         st.subheader("Recent Activity")
-        st.dataframe(plot_df.sort_values('Date', ascending=False)[['ExactDate', 'Category', 'Amount', 'Type']], width='stretch')
+        st.dataframe(plot_df.sort_values('Date', ascending=False)[['ExactDate', 'Category', 'Amount', 'Type']], use_container_width=True)
     else:
         st.info("No payment history found to display trends.")
 
@@ -238,7 +235,7 @@ def show_lending(data):
             lend_display = lend_df[lend_df['isCleared'] != 'Yes'].copy()
         else: lend_display = lend_df.copy()
         l_cols = ['Lent to', 'Amount Lent', 'Amount Due', 'Due Date', 'isCleared']
-        st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], width='stretch')
+        st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], use_container_width=True)
         
         st.subheader("EMI Obligations")
         # EXCLUDED_OWNERS defined at top of dashboard.py or calculations.py
@@ -254,7 +251,7 @@ def show_lending(data):
         st.subheader("Money Owed (Loans)")
         loan_df = data['loans']
         loan_display = loan_df[(loan_df['Cleared'] == 'No') & (loan_df['own'] == 'Yes')].copy() if not loan_df.empty else loan_df
-        st.dataframe(loan_display, width='stretch')
+        st.dataframe(loan_display, use_container_width=True)
 
 def show_goals(metrics):
     st.title("Goals & Wishlist 🎯")

@@ -48,13 +48,37 @@
         }
         .kpi-card {
             background: var(--card-bg);
-            padding: 1.5rem;
+            padding: 1.2rem;
             border-radius: 12px;
             border: 1px solid var(--border);
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
         }
-        .kpi-label { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.5rem; }
-        .kpi-value { font-size: 1.4rem; font-weight: bold; }
-        .kpi-value.money::before { content: "₹"; margin-right: 4px; }
+        .kpi-label { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .kpi-value { font-size: 1.5rem; font-weight: 800; }
+        .kpi-value.money::before { content: "₹"; margin-right: 2px; }
+
+        .formula-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 22px;
+            height: 22px;
+            background: #f8f9fa;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .formula-btn:hover {
+            background: #eee;
+            color: #000;
+        }
 
         /* Tables and Sections */
         .section-grid {
@@ -81,19 +105,68 @@
         .util-bar-fill { background: var(--success); height: 100%; }
         .high-util { background: var(--danger) !important; }
 
+        /* Modal Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            backdrop-filter: blur(2px);
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 10% auto;
+            padding: 2rem;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+        }
+        .modal-header {
+            font-weight: 800;
+            font-size: 1.3rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            white-space: pre-wrap;
+            background: #fdfdfd;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 1px solid #eee;
+            line-height: 1.6;
+            color: #222;
+        }
+        .close-btn {
+            cursor: pointer;
+            font-size: 1.8rem;
+            line-height: 1;
+            color: #999;
+        }
+        .close-btn:hover { color: #000; }
+
         /* Mobile Responsiveness */
         @media (max-width: 600px) {
             body { padding: 1rem; }
             header { flex-direction: column; align-items: flex-start; gap: 1rem; }
-            .kpi-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: 1fr 1fr; gap: 0.8rem; }
             .section { padding: 1rem; overflow-x: auto; }
-            table { min-width: 400px; } /* Ensure tables don't squash too much */
+            table { min-width: 400px; }
+            .kpi-value { font-size: 1.2rem; }
         }
 
         /* Print Styles */
         @media print {
             body { background: white; padding: 0; }
-            .upload-link, .section:last-of-type, #manage-toggle-icon { display: none !important; }
+            .upload-link, .section:last-of-type, #manage-toggle-icon, .modal, .formula-btn { display: none !important; }
             .section { border: none; padding: 0; margin-bottom: 2rem; }
             .kpi-card { break-inside: avoid; border: 1px solid #eee; }
             .section-grid { display: block; }
@@ -111,27 +184,50 @@
 
     <div class="kpi-grid">
         <div class="kpi-card">
+            <div class="formula-btn" onclick="showFormula('Liquidity')">ƒ</div>
             <div class="kpi-label">Total Cash</div>
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_cash) }}</div>
         </div>
         <div class="kpi-card">
+            <div class="formula-btn" onclick="showFormula('Liquidity')">ƒ</div>
             <div class="kpi-label">Total Savings</div>
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_savings) }}</div>
         </div>
         <div class="kpi-card">
+            <div class="formula-btn" onclick="showFormula('Credit Used')">ƒ</div>
             <div class="kpi-label">Total Credit Used</div>
             <div class="kpi-value money" style="color: var(--danger)">{{ "{:,.0f}".format(data.total_actual_used) }}</div>
-            <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.2rem;">
-                Billed Due: {{ "{:,.0f}".format(data.total_cc_due) }}
+            <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem;">
+                Billed: {{ "{:,.0f}".format(data.total_cc_due) }}
             </div>
         </div>
         <div class="kpi-card">
+            <div class="formula-btn" onclick="showFormula('Total Available')">ƒ</div>
+            <div class="kpi-label">Total Available</div>
+            <div class="kpi-value money" style="color: var(--accent)">{{ "{:,.0f}".format(data.total_available_funds) }}</div>
+            <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.2rem;">
+                Incl. Credit Available
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="formula-btn" onclick="showFormula('Net Worth')">ƒ</div>
             <div class="kpi-label">Money Lent Out</div>
             <div class="kpi-value money">{{ "{:,.0f}".format(data.total_lent) }}</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" style="background: rgba(0,128,0,0.02); border-color: var(--success);">
+            <div class="formula-btn" onclick="showFormula('Net Worth')">ƒ</div>
             <div class="kpi-label">Net Worth Estimate</div>
             <div class="kpi-value money" style="color: var(--success)">{{ "{:,.0f}".format(data.net_worth) }}</div>
+        </div>
+    </div>
+
+    <div id="formulaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="modalHeader">Formula</span>
+                <span class="close-btn" onclick="closeModal()">&times;</span>
+            </div>
+            <div id="modalBody" class="modal-body"></div>
         </div>
     </div>
 
@@ -213,35 +309,6 @@
             {% endif %}
         </div>
 
-        {# 
-        <!-- Active EMIs -->
-        <div class="section">
-            <h2>Active EMIs / Loans</h2>
-            {% if data.active_emis %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>Monthly EMI</th>
-                        <th>Remaining</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for emi in data.active_emis %}
-                    <tr>
-                        <td>{{ emi.item }}</td>
-                        <td class="money">{{ "{:,.0f}".format(emi.amount) }}</td>
-                        <td>{{ emi.remaining }} mos</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: var(--text-dim)">No active EMIs found.</p>
-            {% endif %}
-        </div>
-        #}
-
         <!-- Monthly Income -->
         <div class="section">
             <h2>Monthly Income Summary</h2>
@@ -267,6 +334,18 @@
             {% else %}
             <p style="color: var(--text-dim)">No income history found.</p>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="section" style="margin-top: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2 style="margin: 0; border: none; padding: 0;">Payment Trends</h2>
+            <select id="cardFilter" style="padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border);">
+                <option value="ALL">All Cards</option>
+            </select>
+        </div>
+        <div style="height: 300px;">
+            <canvas id="paymentsChart"></canvas>
         </div>
     </div>
 
@@ -331,6 +410,29 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        const explanations = {{ data.metric_explanations | tojson }};
+
+        function showFormula(metric) {
+            const modal = document.getElementById('formulaModal');
+            const header = document.getElementById('modalHeader');
+            const body = document.getElementById('modalBody');
+            
+            header.innerText = metric + ' Calculation Breakdown';
+            body.innerText = explanations[metric] || 'Calculation details not available for this item.';
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('formulaModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('formulaModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
         const rawPayments = [
             {% for p in data.payments_history %}
             { date: "{{ p.date }}", amount: {{ p.amount }}, card: "{{ p.card }}" },
@@ -425,7 +527,6 @@
             updateChart(e.target.value);
         });
 
-        // Populate and update snapshot timestamp
         function updateTimestamp() {
             const now = new Date();
             const year = now.getFullYear();
@@ -438,21 +539,7 @@
             return `${year}-${month}-${day}_${hours}-${minutes}`;
         }
 
-        // Initial populate
         updateTimestamp();
-
-        // Update title for Print to PDF filename
-        window.onbeforeprint = () => {
-            const tsFile = updateTimestamp();
-            document.originalTitle = document.title;
-            // Setting a descriptive filename with .pdf suffix
-            document.title = `Financial_Snapshot_${tsFile}.pdf`;
-        };
-        window.onafterprint = () => {
-            if (document.originalTitle) {
-                document.title = document.originalTitle;
-            }
-        };
 
         function toggleManageSection() {
             const content = document.getElementById('manage-section-content');
