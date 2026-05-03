@@ -317,6 +317,18 @@ def show_budget(data):
             background: linear-gradient(135deg, #f6ffed 0%, #f0f9eb 100%);
             border-left: 8px solid #52c41a; 
         }
+        .card-personal {
+            background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%);
+            border-left: 8px solid #722ed1;
+        }
+        .card-non-personal {
+            background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
+            border-left: 8px solid #faad14;
+        }
+        .card-generic {
+            background: linear-gradient(135deg, #f0fffb 0%, #e6fffb 100%);
+            border-left: 8px solid #13c2c2;
+        }
         
         .card-label {
             font-size: 15px;
@@ -334,12 +346,12 @@ def show_budget(data):
         }
         
         .category-card {
-            background: white;
             padding: 32px;
             border-radius: 20px;
-            border: 1px solid rgba(0,0,0,0.06);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.05);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
             margin-bottom: 32px;
+            transition: transform 0.2s ease;
         }
         .category-header {
             font-size: 20px;
@@ -349,7 +361,7 @@ def show_budget(data):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #f8f9fa;
+            border-bottom: 2px solid rgba(0,0,0,0.05);
             padding-bottom: 16px;
         }
         .cat-total {
@@ -411,6 +423,13 @@ def show_budget(data):
         cat_data = budget_df[budget_df['Category'] == cat]
         cat_total = cat_data['Amount'].sum()
         
+        # Determine theme class
+        card_class = "card-generic"
+        if "PERSONAL" in cat.upper(): card_class = "card-personal"
+        if "INCOME" in cat.upper(): card_class = "card-income"
+        if "NON PERSONAL" in cat.upper(): card_class = "card-non-personal"
+        if "UTILIT" in cat.upper() or "FIXED" in cat.upper(): card_class = "card-generic"
+
         with target_col:
             items_html = ""
             subcats = cat_data['Subcategory'].unique()
@@ -423,7 +442,7 @@ def show_budget(data):
                     items_html += f'<div class="budget-row"><span class="row-label">{row["Item"]}</span><span class="row-amount">₹{row["Amount"]:,.0f}</span></div>'
             
             st.markdown(f"""
-                <div class="category-card">
+                <div class="category-card {card_class}">
                     <div class="category-header">
                         <span>{cat}</span>
                         <span class="cat-total">₹{cat_total:,.0f}</span>
