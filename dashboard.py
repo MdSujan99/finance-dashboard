@@ -490,7 +490,7 @@ def show_credit(data, metrics):
         st.info("No payment history found to display trends.")
 
 
-def show_quick_entry():
+def show_quick_entry(service: FinanceService):
     st.title("Quick Entry 📝")
     st.info("Record transactions quickly.")
 
@@ -519,14 +519,11 @@ def show_quick_entry():
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Record Payment")
             if submit and card_options:
-                with Session(engine) as session:
-                    card_id = card_options[card_name]
-                    card = session.get(CreditCard, card_id)
-                    session.add(CCPayment(card_id=card_id, amount=amount, date=datetime.combine(date, datetime.min.time())))
-                    card.current_due -= amount
-                    card.available_limit += amount
-                    session.add(card)
-                    session.commit()
+                service.add_manual_payment(
+                    card_id=card_options[card_name],
+                    amount=amount,
+                    date=datetime.combine(date, datetime.min.time())
+                )
                 st.success(f"Payment recorded for {card_name}!")
 
     with st.expander("🤝 Record Lending"):
@@ -536,13 +533,11 @@ def show_quick_entry():
             due_date = st.date_input("Due Date", datetime.now())
             submit = st.form_submit_button("Add Lending")
             if submit:
-                with Session(engine) as session:
-                    session.add(Lending(
-                        person=borrower, 
-                        amount=amount, 
-                        due_date=datetime.combine(due_date, datetime.min.time())
-                    ))
-                    session.commit()
+                service.add_manual_lending(
+                    person=borrower,
+                    amount=amount,
+                    due_date=datetime.combine(due_date, datetime.min.time())
+                )
                 st.success(f"Lending to {borrower} recorded!")
 
     with st.expander("💰 Add Income"):
@@ -552,9 +547,11 @@ def show_quick_entry():
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Add Income")
             if submit:
-                with Session(engine) as session:
-                    session.add(Income(source=source, amount=amount, date=date.strftime("%B %Y")))
-                    session.commit()
+                service.add_manual_income(
+                    source=source,
+                    amount=amount,
+                    date=date.strftime("%B %Y")
+                )
                 st.success(f"Income from {source} added!")
 
 

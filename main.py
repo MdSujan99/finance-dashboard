@@ -1,5 +1,6 @@
 import os
 import shutil
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -16,6 +17,10 @@ from utils import clean_currency, format_date
 # --- Constants & Configuration ---
 UPLOAD_DIR = "temp_uploads"
 TEMP_FILE_PATH = os.path.join(UPLOAD_DIR, "latest_finance.xlsx")
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Finance Dashboard")
 templates = Jinja2Templates(directory="templates")
@@ -40,8 +45,10 @@ async def upload_file(file: UploadFile = File(...)):
 
         return RedirectResponse(url="/dashboard", status_code=303)
     except Exception as e:
+        logger.error(f"Upload & Migration failed: {str(e)}", exc_info=True)
         return HTMLResponse(
-            content=f"Upload & Migration failed: {str(e)}", status_code=500
+            content="An internal error occurred during file upload and migration. Please check the server logs.", 
+            status_code=500
         )
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -59,10 +66,10 @@ async def dashboard(request: Request):
             },
         )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Dashboard data fetch failed: {str(e)}", exc_info=True)
         return HTMLResponse(
-            content=f"Error fetching data: {str(e)}", status_code=500
+            content="Error loading dashboard data. Please ensure the database is initialized and the Excel file is valid.", 
+            status_code=500
         )
 
 @app.get("/download_report")
@@ -80,8 +87,10 @@ async def download_report():
             },
         )
     except Exception as e:
+        logger.error(f"Report generation failed: {str(e)}", exc_info=True)
         return HTMLResponse(
-            content=f"Error generating report: {str(e)}", status_code=500
+            content="Error generating the financial report. Please check the server logs.", 
+            status_code=500
         )
 
 # --- Manual Data Entry Routes (Unified with SQLModel) ---
@@ -90,62 +99,55 @@ async def download_report():
 async def add_income(
     source: str = Form(...), amount: float = Form(...), date: str = Form(...)
 ):
-    with Session(engine) as session:
-        session.add(Income(source=source, amount=amount, date=date))
-        session.commit()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    try:
+        service.add_manual_income(source, amount, date)
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        logger.error(f"Add income failed: {str(e)}", exc_info=True)
+        return HTMLResponse(content="Failed to add income record.", status_code=500)
 
 @app.post("/update_account")
 async def update_account(name: str = Form(...), balance: float = Form(...)):
-    with Session(engine) as session:
-        statement = select(Account).where(Account.name == name)
-        account = session.exec(statement).first()
-        if account:
-            account.balance = balance
-            account.updated_at = datetime.utcnow()
-            session.add(account)
-            session.commit()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    try:
+        service.update_account_balance(name, balance)
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        logger.error(f"Update account failed: {str(e)}", exc_info=True)
+        return HTMLResponse(content="Failed to update account balance.", status_code=500)
 
 @app.post("/add_payment")
 async def add_payment(
     card_id: int = Form(...), amount: float = Form(...), date: str = Form(...)
 ):
-    with Session(engine) as session:
-        # Update current due and available limit on the card automatically
-        statement = select(CreditCard).where(CreditCard.id == card_id)
-        card = session.exec(statement).one()
-        
-        session.add(
-            CCPayment(
-                card_id=card_id, amount=amount, date=datetime.strptime(date, "%Y-%m-%d")
-            )
-        )
-        
-        card.current_due -= amount
-        card.available_limit += amount
-        session.add(card)
-        session.commit()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    try:
+        service.add_manual_payment(card_id, amount, datetime.strptime(date, "%Y-%m-%d"))
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        logger.error(f"Add payment failed: {str(e)}", exc_info=True)
+        return HTMLResponse(content="Failed to record credit card payment.", status_code=500)
 
 @app.post("/add_lending")
 async def add_lending(
     person: str = Form(...), amount: float = Form(...), due_date: str = Form(...)
 ):
-    with Session(engine) as session:
+    try:
         due = datetime.strptime(due_date, "%Y-%m-%d") if due_date else None
-        session.add(Lending(person=person, amount=amount, due_date=due))
-        session.commit()
-    return RedirectResponse(url="/dashboard", status_code=303)
+        service.add_manual_lending(person, amount, due)
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        logger.error(f"Add lending failed: {str(e)}", exc_info=True)
+        return HTMLResponse(content="Failed to record lending transaction.", status_code=500)
 
 @app.post("/add_emi")
 async def add_emi(
     provider: str = Form(...), amount: float = Form(...), remaining: str = Form(...)
 ):
-    with Session(engine) as session:
-        session.add(Loan(provider=provider, monthly_emi=amount, months_left=remaining))
-        session.commit()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    try:
+        service.add_manual_emi(provider, amount, remaining)
+        return RedirectResponse(url="/dashboard", status_code=303)
+    except Exception as e:
+        logger.error(f"Add EMI failed: {str(e)}", exc_info=True)
+        return HTMLResponse(content="Failed to record EMI obligation.", status_code=500)
 
 if __name__ == "__main__":
     import uvicorn

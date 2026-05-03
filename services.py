@@ -65,3 +65,48 @@ class FinanceService:
         """Migrates data from Excel to the unified SQLite database."""
         from migrate import migrate_excel_to_sqlite
         migrate_excel_to_sqlite(excel_path)
+
+    # --- Manual Data Entry Methods ---
+
+    def add_manual_income(self, source: str, amount: float, date: str):
+        with Session(engine) as session:
+            session.add(Income(source=source, amount=amount, date=date, is_manual=True))
+            session.commit()
+
+    def update_account_balance(self, name: str, balance: float):
+        with Session(engine) as session:
+            statement = select(Account).where(Account.name == name)
+            account = session.exec(statement).first()
+            if account:
+                account.balance = balance
+                account.updated_at = datetime.utcnow()
+                account.is_manual = True
+                session.add(account)
+                session.commit()
+
+    def add_manual_payment(self, card_id: int, amount: float, date: datetime):
+        with Session(engine) as session:
+            statement = select(CreditCard).where(CreditCard.id == card_id)
+            card = session.exec(statement).one()
+            
+            session.add(
+                CCPayment(
+                    card_id=card_id, amount=amount, date=date, is_manual=True
+                )
+            )
+            
+            card.current_due -= amount
+            card.available_limit += amount
+            card.is_manual = True
+            session.add(card)
+            session.commit()
+
+    def add_manual_lending(self, person: str, amount: float, due_date: Optional[datetime]):
+        with Session(engine) as session:
+            session.add(Lending(person=person, amount=amount, due_date=due_date, is_manual=True))
+            session.commit()
+
+    def add_manual_emi(self, provider: str, amount: float, remaining: str):
+        with Session(engine) as session:
+            session.add(Loan(provider=provider, monthly_emi=amount, months_left=remaining, is_manual=True))
+            session.commit()
