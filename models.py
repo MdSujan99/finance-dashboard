@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, create_engine, Session
+from sqlalchemy import UniqueConstraint
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -9,6 +10,7 @@ load_dotenv()
 
 class Account(SQLModel, table=True):
     """Maps to 'Net Worth' (Cash/Savings totals)"""
+    __table_args__ = (UniqueConstraint("name"), {"extend_existing": True})
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str  # e.g., "Cash", "Savings"
     balance: float
@@ -17,6 +19,7 @@ class Account(SQLModel, table=True):
 
 class CreditCard(SQLModel, table=True):
     """Maps to 'Net Worth' (Credit Card Limits/Dues)"""
+    __table_args__ = (UniqueConstraint("name"), {"extend_existing": True})
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     max_limit: float
@@ -27,15 +30,19 @@ class CreditCard(SQLModel, table=True):
 
 class CCPayment(SQLModel, table=True):
     """Maps to 'Credit Card Payments' sheet"""
+    __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
     card_id: int = Field(foreign_key="creditcard.id")
     amount: float
     date: datetime
+    entry_hash: Optional[str] = Field(default=None, unique=True, index=True)
+    transaction_type: str = Field(default="Transfer") # Default for CC payment
     card: Optional[CreditCard] = Relationship(back_populates="payments")
     is_manual: bool = Field(default=False)
 
 class Lending(SQLModel, table=True):
     """Maps to 'Net Worth' (Lendings) + 'Lendings' (Due Dates)"""
+    __table_args__ = (UniqueConstraint("person", "amount", "due_date"), {"extend_existing": True})
     id: Optional[int] = Field(default=None, primary_key=True)
     person: str
     amount: float
@@ -45,6 +52,7 @@ class Lending(SQLModel, table=True):
 
 class Loan(SQLModel, table=True):
     """Maps to 'EMIs' sheet"""
+    __table_args__ = (UniqueConstraint("provider", "monthly_emi", "months_left"), {"extend_existing": True})
     id: Optional[int] = Field(default=None, primary_key=True)
     provider: str
     monthly_emi: float
@@ -54,11 +62,36 @@ class Loan(SQLModel, table=True):
 
 class Income(SQLModel, table=True):
     """Maps to 'Incomes' sheet"""
+    __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
     source: str
     amount: float
     date: str  # e.g., "June 2025"
+    entry_hash: Optional[str] = Field(default=None, unique=True, index=True)
+    transaction_type: str = Field(default="Income")
     is_manual: bool = Field(default=False)
+
+class Expense(SQLModel, table=True):
+    """Tracks manual expenses added via UI"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    item: str
+    amount: float
+    category: str = Field(default="General")
+    date: datetime = Field(default_factory=datetime.utcnow)
+    entry_hash: Optional[str] = Field(default=None, unique=True, index=True)
+    transaction_type: str = Field(default="Expense") # Can be 'Expense' or 'Investment'
+    is_manual: bool = Field(default=True)
+
+class Investment(SQLModel, table=True):
+    """Tracks one-time or recurring investments"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    amount: float
+    date: datetime = Field(default_factory=datetime.utcnow)
+    entry_hash: Optional[str] = Field(default=None, unique=True, index=True)
+    is_manual: bool = Field(default=True)
 
 # Database Engine Configuration (SQLite by default for unified access)
 DB_NAME = "finance.db"

@@ -445,10 +445,10 @@ def show_credit(data, metrics):
     if not trend_df.empty:
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            types = ["ALL"] + sorted(trend_df["Type"].unique().tolist())
+            types = ["ALL"] + sorted([str(x) for x in trend_df["Type"].dropna().unique()])
             selected_type = st.selectbox("Filter by Bill Type", types)
         with col_f2:
-            categories = sorted(trend_df["Category"].unique().tolist())
+            categories = sorted([str(x) for x in trend_df["Category"].dropna().unique()])
             selected_cats = st.multiselect(
                 "Filter by Account(s)", categories, default=[]
             )
@@ -807,10 +807,14 @@ def main():
 
     metrics = data # FinanceService returns metrics merged with data
 
+    # Show Sanity Warnings if any
+    if "sanity_warnings" in data and data["sanity_warnings"]:
+        for warning in data["sanity_warnings"]:
+            st.warning(warning)
+
     # Sidebar Actions
     st.sidebar.title("Actions")
-    from calculations import FinanceCalculations
-    report_text = FinanceCalculations.generate_report_text(data, metrics)
+    report_text = service.generate_report(data)
     st.sidebar.download_button(
         label="📥 Download Report",
         data=report_text,

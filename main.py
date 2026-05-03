@@ -77,8 +77,7 @@ async def download_report():
     """Generates and downloads a text-based financial report."""
     try:
         data = service.get_dashboard_data()
-        from calculations import FinanceCalculations
-        report_content = FinanceCalculations.generate_report_text(data, data)
+        report_content = service.generate_report(data)
 
         return PlainTextResponse(
             content=report_content,

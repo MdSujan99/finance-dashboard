@@ -7,39 +7,47 @@ EXCLUDED_OWNERS = ["Pyaru Mama"]
 class FinanceCalculations:
     @staticmethod
     def get_summary_metrics(data):
+        # 1. Credit Card Metrics (Snapshot)
         cc = data['credit_cards']
         total_cc_used = cc['Current Balance'].sum() if not cc.empty else 0
         total_cc_limit = cc['Max Limit'].sum() if not cc.empty else 0
         util_pct = (total_cc_used / total_cc_limit * 100) if total_cc_limit > 0 else 0
 
+        # 2. Baseline Income & Burn (from Budget Sheet)
+        budget_df = data.get('budget', pd.DataFrame())
+        budget_income = 0
+        budget_burn = 0
+        
+        # Keywords that signify an investment/savings allocation rather than a "burn" expense
+        INVESTMENT_KEYWORDS = ['INVESTMENT', 'INVESTMENTS', 'SAVINGS', 'MF', 'SIP', 'GOLD', 'EQUITY', 'STOCK']
+
+        if not budget_df.empty:
+            # 2a. Calculate Income Baseline
+            budget_income = budget_df[budget_df['Category'].str.upper() == 'INCOME']['Amount'].sum()
+            
+            # 2b. Calculate Burn Baseline (Exclude Income AND any Investment-like items)
+            # We check both the top-level Category and the Subcategory column
+            def is_investment(row):
+                cat = str(row.get('Category', '')).upper()
+                sub = str(row.get('Subcategory', '')).upper()
+                if cat == 'INCOME':
+                    return True # Income is not burn
+                return any(kw in cat for kw in INVESTMENT_KEYWORDS) or \
+                       any(kw in sub for kw in INVESTMENT_KEYWORDS)
+
+            investment_mask = budget_df.apply(is_investment, axis=1)
+            budget_burn = budget_df[~investment_mask]['Amount'].sum()
+
+        # 3. Monthly Baseline established
         incomes = data['incomes']
-        total_income = incomes['Amount'].sum() if not incomes.empty else 0
-
-        lendings = data['lendings']
-        if not lendings.empty:
-            if 'isCleared' in lendings.columns:
-                active_lend = lendings[lendings['isCleared'] != 'Yes']
-            else:
-                active_lend = lendings
-            l_col = 'Amount Due' if 'Amount Due' in active_lend.columns else ('Amount Lent' if 'Amount Lent' in active_lend.columns else 'Amount Outstanding')
-            total_lent = active_lend[l_col].sum() if l_col in active_lend.columns else 0
+        if budget_income > 0:
+            monthly_income = budget_income
+        elif not incomes.empty:
+            monthly_income = incomes.iloc[-1]['Amount']
         else:
-            total_lent = data['lendings_nw']['Amount Lent'].sum() if not data['lendings_nw'].empty else 0
+            monthly_income = 0
 
-        loans = data['loans']
-        total_loan_owed = 0
-        if not loans.empty:
-            active_loans = loans[(loans['Cleared'] == 'No') & (loans['own'] == 'Yes')]
-            total_loan_owed = active_loans['Amount Due'].sum()
-
-        pf_value = data.get('pf_value', 0)
-
-        nw = data['net_worth']
-        total_cash = nw[nw['Category'] == 'Cash']['Balance'].sum() if not nw.empty else 0
-        total_savings = nw[nw['Category'] == 'Savings']['Balance'].sum() if not nw.empty else 0
-        total_assets = total_cash + total_savings + total_lent + pf_value
-        net_worth = total_assets - total_cc_used - total_loan_owed
-
+        # 4. Actual Monthly Expenses & Recurring Obligations
         emi_total = 0
         emis = data['emis']
         if not emis.empty:
@@ -55,24 +63,71 @@ class FinanceCalculations:
         if not fixed_df.empty and 'Monthly Amount' in fixed_df.columns:
             fixed_exp_total = fixed_df['Monthly Amount'].sum()
 
-        # Add new SQLite expenses
-        sqlite_expenses_total = 0
+        current_actual_variable_expense = 0
+        current_actual_investment = 0
         sqlite_expenses_df = data.get('expenses', pd.DataFrame())
         if not sqlite_expenses_df.empty and 'amount' in sqlite_expenses_df.columns:
-            sqlite_expenses_total = sqlite_expenses_df['amount'].sum()
+            now = datetime.now()
+            if not pd.api.types.is_datetime64_any_dtype(sqlite_expenses_df['date']):
+                sqlite_expenses_df['date'] = pd.to_datetime(sqlite_expenses_df['date'])
+            
+            mask = (sqlite_expenses_df['date'].dt.month == now.month) & \
+                   (sqlite_expenses_df['date'].dt.year == now.year)
+            
+            current_month_df = sqlite_expenses_df[mask]
+            
+            # CRITICAL FIX 2: Transaction Type Classification
+            # Split variable spending into actual Expenses vs Investments
+            if 'transaction_type' in current_month_df.columns:
+                current_actual_variable_expense = current_month_df[current_month_df['transaction_type'] == 'Expense']['amount'].sum()
+                current_actual_investment = current_month_df[current_month_df['transaction_type'] == 'Investment']['amount'].sum()
+            else:
+                # Fallback if column missing
+                current_actual_variable_expense = current_month_df['amount'].sum()
 
-        monthly_expenses = emi_total + fixed_exp_total + (total_cc_used / 2) + sqlite_expenses_total
-        monthly_savings = total_income - monthly_expenses
-        savings_rate = (monthly_savings / total_income * 100) if total_income > 0 else 0
+        # Final Monthly Burn Calculation (Strictly non-investment outflows)
+        if budget_burn > 0:
+            monthly_expenses = budget_burn
+        else:
+            monthly_expenses = emi_total + fixed_exp_total + current_actual_variable_expense
+
+        # 5. Asset & Net Worth Snapshot
+        lendings = data['lendings']
+        if not lendings.empty:
+            active_lend = lendings[lendings['isCleared'] != 'Yes'] if 'isCleared' in lendings.columns else lendings
+            l_col = 'Amount Due' if 'Amount Due' in active_lend.columns else ('Amount Lent' if 'Amount Lent' in active_lend.columns else 'Amount Outstanding')
+            total_lent = active_lend[l_col].sum() if l_col in active_lend.columns else 0
+        else:
+            total_lent = data['lendings_nw']['Amount Lent'].sum() if not data['lendings_nw'].empty else 0
+
+        loans = data['loans']
+        total_loan_owed = 0
+        if not loans.empty:
+            active_loans = loans[(loans['Cleared'] == 'No') & (loans['own'] == 'Yes')]
+            total_loan_owed = active_loans['Amount Due'].sum()
+
+        pf_value = data.get('pf_value', 0)
+        nw = data['net_worth']
+        total_cash = nw[nw['Category'] == 'Cash']['Balance'].sum() if not nw.empty else 0
+        total_savings = nw[nw['Category'] == 'Savings']['Balance'].sum() if not nw.empty else 0
         
-        # 1. Financial Runway: (Cash + Savings) / monthly burn
+        total_assets = total_cash + total_savings + total_lent + pf_value
+        net_worth = total_assets - total_cc_used - total_loan_owed
+
+        # 6. Final Metric Derivations
+        monthly_savings = monthly_income - monthly_expenses
+        
+        # CRITICAL FIX 3: Define wealth_velocity = savings + investments
+        # This reflects total value generated/retained, whether in cash or assets
+        wealth_velocity = monthly_savings + current_actual_investment
+        
+        savings_rate = (monthly_savings / monthly_income * 100) if monthly_income > 0 else 0
+        
+        # Financial Runway: How many months liquidity covers current burn
         liquid_assets = total_cash + total_savings
         runway = (liquid_assets / monthly_expenses) if monthly_expenses > 0 else 0
 
-        # 2. Wealth Velocity: monthly net worth increase (approx monthly savings)
-        wealth_velocity = monthly_savings
-
-        # 3. Financial Independence Ratio: Assets / Yearly Expenses
+        # Financial Independence Ratio: Assets / Yearly Expenses
         yearly_expenses = monthly_expenses * 12
         fi_ratio = (total_assets / yearly_expenses) if yearly_expenses > 0 else 0
 
@@ -90,16 +145,47 @@ class FinanceCalculations:
             "util_pct": round(util_pct, 1),
             "total_lent": total_lent,
             "total_loan_owed": total_loan_owed,
-            "monthly_income": total_income,
+            "monthly_income": monthly_income,
             "savings_rate": round(savings_rate, 1),
             "runway": round(runway, 1),
             "monthly_expenses": monthly_expenses,
-            "total_expenses": sqlite_expenses_total,
+            "total_expenses": current_actual_variable_expense,
+            "total_investments": current_actual_investment,
             "pf_value": pf_value,
             "wealth_velocity": wealth_velocity,
             "fi_ratio": round(fi_ratio, 2),
             "total_assets": total_assets
         }
+
+    @staticmethod
+    def run_sanity_checks(metrics, data):
+        """Runs critical sanity checks and returns a list of warnings for the dashboard."""
+        warnings = []
+        
+        # 1. Income Duplication Check
+        total_income = metrics.get('monthly_income', 0)
+        budget_df = data.get('budget', pd.DataFrame())
+        expected_income = 0
+        if not budget_df.empty:
+            expected_income = budget_df[budget_df['Category'] == 'Income']['Amount'].sum()
+        
+        if expected_income > 0 and total_income > 1.5 * expected_income:
+            warnings.append(f"⚠️ Possible Duplicate Income: Current income (₹{total_income:,.0f}) is > 150% of budgeted income (₹{expected_income:,.0f}).")
+
+        # 2. Lending Integrity Check
+        lendings_df = data.get('lendings', pd.DataFrame())
+        reported_lent = metrics.get('total_lent', 0)
+        actual_sum = 0
+        if not lendings_df.empty:
+            l_col = 'Amount Due' if 'Amount Due' in lendings_df.columns else ('Amount Lent' if 'Amount Lent' in lendings_df.columns else 'Amount Outstanding')
+            if l_col in lendings_df.columns:
+                active_lend = lendings_df[lendings_df['isCleared'] != 'Yes'] if 'isCleared' in lendings_df.columns else lendings_df
+                actual_sum = active_lend[l_col].sum()
+        
+        if abs(reported_lent - actual_sum) > 10:
+            warnings.append(f"⚠️ Lending Mismatch: Summary reports ₹{reported_lent:,.0f} but sum of active entries is ₹{actual_sum:,.0f}.")
+            
+        return warnings
 
     @staticmethod
     def get_metric_explanations(metrics):
@@ -113,8 +199,9 @@ class FinanceCalculations:
                          f"₹{liabilities:,.0f} (Credit Owed + Loans) = "
                          f"₹{metrics.get('net_worth', 0):,.0f}",
             
-            "Wealth Velocity": f"Wealth Velocity = Monthly Income - Monthly Burn\n"
-                               f"₹{metrics.get('monthly_income', 0):,.0f} - ₹{metrics.get('monthly_expenses', 0):,.0f} = "
+            "Wealth Velocity": f"Wealth Velocity = Monthly Savings + Monthly Investments\n"
+                               f"₹{(metrics.get('monthly_income', 0) - metrics.get('monthly_expenses', 0)):,.0f} (Savings) + "
+                               f"₹{metrics.get('total_investments', 0):,.0f} (Investments) = "
                                f"₹{metrics.get('wealth_velocity', 0):,.0f} per month",
             
             "FI Ratio": f"FI Ratio = Total Assets / Annual Expenses\n"
@@ -126,13 +213,14 @@ class FinanceCalculations:
                       f"{metrics.get('runway', 0)} months",
             
             "Savings Rate": f"Savings Rate = (Monthly Savings / Monthly Income) × 100\n"
-                            f"(₹{metrics.get('wealth_velocity', 0):,.0f} / ₹{metrics.get('monthly_income', 0):,.0f}) × 100 = "
+                            f"(₹{(metrics.get('monthly_income', 0) - metrics.get('monthly_expenses', 0)):,.0f} / ₹{metrics.get('monthly_income', 0):,.0f}) × 100 = "
                             f"{metrics.get('savings_rate', 0)}%",
             
-            "Monthly Income": f"Sum of all income records: ₹{metrics.get('monthly_income', 0):,.0f}",
+            "Monthly Income": f"Monthly Income = Budgeted Income (or latest recorded entry)\n"
+                              f"Baseline: ₹{metrics.get('monthly_income', 0):,.0f}",
             
-            "Monthly Burn": f"Monthly Burn = EMIs + Fixed Bills + Expenses + 50% Credit Buffer\n"
-                            f"Total Outflows = ₹{metrics.get('monthly_expenses', 0):,.0f}",
+            "Monthly Burn": f"Monthly Burn = Outflows strictly excluding Investments\n"
+                            f"Total Burn: ₹{metrics.get('monthly_expenses', 0):,.0f}",
             
             "Credit Used": f"Total amount owed across all cards: ₹{metrics.get('total_cc_used', 0):,.0f}",
             
@@ -227,93 +315,3 @@ class FinanceCalculations:
             df = pd.concat([df, current_row], ignore_index=True)
             return df.sort_values('Date')
         return pd.DataFrame()
-
-    @staticmethod
-    def generate_report_text(data, metrics):
-        """Generates a text-based financial report."""
-        report = []
-        report.append("=" * 50)
-        report.append("FINANCIAL INTELLIGENCE REPORT")
-        report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        report.append("=" * 50)
-        report.append("")
-
-        # 1. Financial Intelligence Summary
-        report.append("--- FINANCIAL SUMMARY ---")
-        report.append(f"Net Worth Estimate:      ₹{metrics.get('net_worth', 0):,.2f}")
-        report.append(f"Total Cash:              ₹{metrics.get('total_cash', 0):,.2f}")
-        report.append(f"Total Savings:           ₹{metrics.get('total_savings', 0):,.2f}")
-        report.append(f"Liquidity (Cash+Savings): ₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.2f}")
-        report.append(f"Total Credit Owed:       ₹{metrics.get('total_cc_used', 0):,.2f}")
-        report.append(f"Total Available Funds:   ₹{metrics.get('total_available_funds', 0):,.2f}")
-        report.append(f"Total Money Lent Out:    ₹{metrics.get('total_lent', 0):,.2f}")
-        report.append(f"Credit Utilisation:      {metrics.get('util_pct', 0)}%")
-        report.append("")
-
-        # 2. Budget Summary
-        report.append("--- BUDGET SUMMARY ---")
-        budget_df = data.get('budget', pd.DataFrame())
-        if not budget_df.empty:
-            total_budget_income = budget_df[budget_df['Category'] == 'Income']['Amount'].sum()
-            total_budget_expense = budget_df[budget_df['Category'] != 'Income']['Amount'].sum()
-            report.append(f"Expected Monthly Income:  ₹{total_budget_income:,.2f}")
-            report.append(f"Budgeted Monthly Burn:    ₹{total_budget_expense:,.2f}")
-            report.append(f"Projected Monthly Savings: ₹{total_budget_income - total_budget_expense:,.2f}")
-            report.append("")
-            
-            report.append("Detailed Budget Breakdown:")
-            current_cat = None
-            for _, item in budget_df.iterrows():
-                if item['Category'] != current_cat:
-                    current_cat = item['Category']
-                    report.append(f"  [{current_cat}]")
-                report.append(f"    - {item['Item']}: ₹{item['Amount']:,.2f}")
-        else:
-            report.append("No budget data available.")
-        report.append("")
-
-        # 3. Active Lendings
-        report.append("--- ACTIVE LENDINGS ---")
-        lendings_df = data.get('lendings', pd.DataFrame())
-        if not lendings_df.empty:
-            active_lend = lendings_df[lendings_df['isCleared'] != 'Yes'] if 'isCleared' in lendings_df.columns else lendings_df
-            for _, l in active_lend.iterrows():
-                due_date = l.get('Due Date', 'N/A')
-                is_overdue = False
-                if due_date != 'N/A':
-                    try:
-                        is_overdue = pd.to_datetime(due_date) < datetime.now()
-                    except:
-                        pass
-                status = " (OVERDUE)" if is_overdue else ""
-                report.append(f"- {l['Lent to']}: ₹{l.get('Amount Due', l.get('Amount Lent', 0)):,.2f} (Due: {due_date}){status}")
-        else:
-            report.append("No active lendings.")
-        report.append("")
-
-        # 4. Recent Trends (Payment History)
-        report.append("--- RECENT PAYMENT TRENDS ---")
-        payments_df = data.get('payments', pd.DataFrame())
-        if not payments_df.empty:
-            # Show last 10 payments
-            recent = payments_df.sort_values('Payment Date').tail(10)
-            for _, p in recent.iterrows():
-                report.append(f"- {p['Payment Date'].strftime('%Y-%m-%d')}: ₹{p['Amount Paid']:,.2f} to {p['Card Name']}")
-        else:
-            report.append("No recent payment history.")
-        report.append("")
-
-        # 5. Active EMIs
-        report.append("--- ACTIVE EMIs ---")
-        emis_df = data.get('emis', pd.DataFrame())
-        if not emis_df.empty:
-            active_emis = emis_df[emis_df['IsClosed'] == 'No'] if 'IsClosed' in emis_df.columns else emis_df
-            for _, emi in active_emis.iterrows():
-                emi_col = 'Amt Due' if 'Amt Due' in emi else 'EMI Amount'
-                rem_col = 'EMIs Remaining' if 'EMIs Remaining' in emi else 'Months Left'
-                report.append(f"- {emi.get('Provider', 'Unknown')}: ₹{emi.get(emi_col, 0):,.2f} ({emi.get(rem_col, 'N/A')} months left)")
-        else:
-            report.append("No active EMIs.")
-        report.append("")
-
-        return "\n".join(report)

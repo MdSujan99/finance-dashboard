@@ -55,6 +55,14 @@ class DataLoader:
             if excel is None or sheet_name not in excel.sheet_names:
                 return pd.DataFrame()
             df = excel.parse(sheet_name)
+            
+            # Prevent raw 'nan' from appearing in output
+            for col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].fillna("Unknown")
+                else:
+                    df[col] = df[col].fillna(0)
+                    
             # Standard cleanup for most sheets
             amount_cols = ['Amount', 'Balance', 'Current Balance', 'Max Limit', 
                            'Amount Outstanding', 'EMI Amount', 'Expected Cost', 'Amt Due', 
@@ -82,12 +90,12 @@ class DataLoader:
         try:
             df = excel.parse('Net Worth', header=None)
             
-            # 1. Robust extraction using labels (Anchor-Based)
+            # Robust extraction using labels (Anchor-Based)
             pf_val = get_value_by_label(df, "PF Account", col_offset=1)
             if pf_val == 0: # Fallback
                  pf_val = get_value_by_label(df, "PF", col_offset=1)
 
-            # Loans (Columns 7 and 8 usually, let's search for "Loans")
+            # Loans
             loans_nw = []
             loan_val = get_value_by_label(df, "Loans", col_offset=1)
             if loan_val > 0:
@@ -104,7 +112,7 @@ class DataLoader:
 
             mode_col4 = None
             for idx, row in df.iterrows():
-                # Parse Credit Card info (Columns 4 and 5)
+                # Parse Credit Card info
                 label_cc = str(row.iloc[4]).strip() if len(row) > 4 else ""
                 val_cc = clean_currency(row.iloc[5]) if len(row) > 5 else 0
 
@@ -118,15 +126,15 @@ class DataLoader:
                     elif mode_col4 == "LIMIT": cc_raw_data[label_cc]["limit"] = val_cc
                     elif mode_col4 == "DUE": cc_raw_data[label_cc]["due"] = val_cc
 
-                # Parse Cash/Savings (Columns 1 and 2)
+                # Parse Cash/Savings
                 label_cash = str(row.iloc[1]).strip() if len(row) > 1 else ""
                 val_cash = clean_currency(row.iloc[2]) if len(row) > 2 else 0
                 if label_cash and val_cash > 0 and label_cash.lower() != 'nan' and label_cash.lower() != 'total':
-                    if "PF" not in label_cash.upper(): # Skip PF as it's handled
+                    if "PF" not in label_cash.upper():
                         cat = "Savings" if any(x in label_cash.upper() for x in ["SAVINGS", "FD", "HDFC", "SLICE FD"]) else "Cash"
                         cash_savings.append({"Name": label_cash, "Balance": val_cash, "Category": cat})
 
-                # Parse Lendings (Columns 7 and 8)
+                # Parse Lendings
                 label_lend = str(row.iloc[7]).strip() if len(row) > 7 else ""
                 val_lend = clean_currency(row.iloc[8]) if len(row) > 8 else 0
                 if label_lend and val_lend > 0 and "total" not in label_lend.lower() and label_lend.lower() != 'nan' and "lendings" not in label_lend.lower() and "loans" not in label_lend.lower():
@@ -222,18 +230,21 @@ class DataLoader:
     def get_all_data(self):
         """Fetches all data, prioritizing database for dynamic entries."""
         try:
-            from models import Income, CCPayment, Lending
+            from models import Income, CCPayment, Lending, Expense, Investment
             with Session(engine) as session:
-                sqlite_income = pd.DataFrame([i.dict() for i in session.exec(select(Income)).all()])
-                sqlite_cc_payments = pd.DataFrame([p.dict() for p in session.exec(select(CCPayment)).all()])
-                sqlite_lending = pd.DataFrame([l.dict() for l in session.exec(select(Lending)).all()])
-                sqlite_expenses = pd.DataFrame() 
+                # IMPORTANT: Only fetch manual entries from SQLite to avoid duplication with Excel
+                sqlite_income = pd.DataFrame([i.dict() for i in session.exec(select(Income).where(Income.is_manual == True)).all()])
+                sqlite_cc_payments = pd.DataFrame([p.dict() for p in session.exec(select(CCPayment).where(CCPayment.is_manual == True)).all()])
+                sqlite_lending = pd.DataFrame([l.dict() for l in session.exec(select(Lending).where(Lending.is_manual == True)).all()])
+                sqlite_expenses = pd.DataFrame([e.dict() for e in session.exec(select(Expense).where(Expense.is_manual == True)).all()])
+                sqlite_investments = pd.DataFrame([inv.dict() for inv in session.exec(select(Investment).where(Investment.is_manual == True)).all()])
         except Exception as e:
             logger.error(f"Error loading from DB: {e}")
             sqlite_income = pd.DataFrame()
             sqlite_cc_payments = pd.DataFrame()
             sqlite_lending = pd.DataFrame()
             sqlite_expenses = pd.DataFrame()
+            sqlite_investments = pd.DataFrame()
 
         excel = self.load_excel()
         nw_details = self._parse_net_worth_details(excel)
@@ -256,6 +267,7 @@ class DataLoader:
             "loans": nw_details["loans_nw_df"],
             "pf_value": nw_details["pf_value"],
             "expenses": sqlite_expenses,
+            "investments": sqlite_investments,
             "budget": self._parse_monthly_budget(excel)
         }
         
@@ -264,15 +276,13 @@ class DataLoader:
     def _format_income(self, sqlite_df, excel_df):
         if sqlite_df.empty: return excel_df
         res = sqlite_df.rename(columns={'source': 'Source', 'amount': 'Amount', 'date': 'Date Of Credit'})
-        return pd.concat([excel_df, res], ignore_index=True)
+        return pd.concat([excel_df, res], ignore_index=True).fillna("Unknown")
 
     def _format_cc_payments(self, sqlite_df, excel_df):
         if sqlite_df.empty: return excel_df
-        # Need to join with CreditCard to get names if using SQLModel
         res = sqlite_df.rename(columns={'date': 'Payment Date', 'amount': 'Amount Paid'})
-        # Note: card_id needs name lookup if we want to match Excel format perfectly
         res['Payment Date'] = pd.to_datetime(res['Payment Date'])
-        return pd.concat([excel_df, res], ignore_index=True)
+        return pd.concat([excel_df, res], ignore_index=True).fillna("Unknown")
 
     def _format_lendings(self, sqlite_df, excel_df):
         if sqlite_df.empty: return excel_df
@@ -283,4 +293,4 @@ class DataLoader:
         })
         res['isCleared'] = res.get('is_paid', False).apply(lambda x: 'Yes' if x else 'No')
         res['Amount Due'] = res['Amount Lent']
-        return pd.concat([excel_df, res], ignore_index=True)
+        return pd.concat([excel_df, res], ignore_index=True).fillna("Unknown")

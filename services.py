@@ -1,11 +1,13 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import pandas as pd
 from sqlmodel import Session, select
-from models import Account, CreditCard, CCPayment, Lending, Loan, Income, engine
+from models import Account, CreditCard, CCPayment, Lending, Loan, Income, Expense, Investment, engine
 from utils import format_date, clean_currency
 from calculations import FinanceCalculations
 from data_loader import DataLoader
+
+import jinja2
 
 class FinanceService:
     """
@@ -13,6 +15,33 @@ class FinanceService:
     """
     def __init__(self):
         self.loader = DataLoader("latest_finance.xlsx")
+        self.jinja_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader("templates")
+        )
+        self.jinja_env.filters["format_currency"] = lambda x: f"{x:,.2f}"
+
+    def generate_report(self, data: Dict[str, Any]) -> str:
+        """
+        Renders the enhanced financial report using the Jinja2 template.
+        """
+        template = self.jinja_env.get_template("report.txt")
+        
+        # Prepare context
+        context = {
+            **data,
+            "now_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "liquidity": data.get("total_cash", 0) + data.get("total_savings", 0),
+            "payments_history": [
+                {
+                    "date": row.get("Payment Date").strftime("%Y-%m-%d"),
+                    "amount": row.get("Amount Paid", 0),
+                    "card": row.get("Card Name", "Unknown")
+                }
+                for _, row in data.get("payments", pd.DataFrame()).sort_values("Payment Date").tail(10).iterrows()
+            ]
+        }
+        
+        return template.render(context)
 
     def get_dashboard_data(self) -> Dict[str, Any]:
         """
@@ -26,9 +55,9 @@ class FinanceService:
         
         # 3. Augment with explanations and extra UI data
         metrics["metric_explanations"] = FinanceCalculations.get_metric_explanations(metrics)
+        metrics["sanity_warnings"] = FinanceCalculations.run_sanity_checks(metrics, data)
         
-        # 4. Format for UI compatibility (e.g., specific lists for FastAPI)
-        # We merge everything into a single dictionary
+        # 4. Format for UI compatibility
         result = {**data, **metrics}
         
         # Add some FastAPI specific formatting if needed
@@ -49,7 +78,8 @@ class FinanceService:
                     is_overdue = False
                     if due_date and due_date != "N/A":
                         try:
-                            is_overdue = pd.to_timestamp(due_date) < datetime.now()
+                            # Use pd.to_datetime for consistency
+                            is_overdue = pd.to_datetime(due_date) < datetime.now()
                         except: pass
                     
                     result["active_lendings"].append({
@@ -68,9 +98,37 @@ class FinanceService:
 
     # --- Manual Data Entry Methods ---
 
-    def add_manual_income(self, source: str, amount: float, date: str):
+    def add_manual_income(self, source: str, amount: float, date: str, trans_type: str = "Income"):
         with Session(engine) as session:
-            session.add(Income(source=source, amount=amount, date=date, is_manual=True))
+            session.add(Income(
+                source=source, 
+                amount=amount, 
+                date=date, 
+                transaction_type=trans_type,
+                is_manual=True
+            ))
+            session.commit()
+
+    def add_manual_expense(self, item: str, amount: float, category: str, date: datetime, trans_type: str = "Expense"):
+        with Session(engine) as session:
+            session.add(Expense(
+                item=item, 
+                amount=amount, 
+                category=category, 
+                date=date, 
+                transaction_type=trans_type,
+                is_manual=True
+            ))
+            session.commit()
+
+    def add_manual_investment(self, name: str, amount: float, date: datetime):
+        with Session(engine) as session:
+            session.add(Investment(
+                name=name,
+                amount=amount,
+                date=date,
+                is_manual=True
+            ))
             session.commit()
 
     def update_account_balance(self, name: str, balance: float):
@@ -91,7 +149,11 @@ class FinanceService:
             
             session.add(
                 CCPayment(
-                    card_id=card_id, amount=amount, date=date, is_manual=True
+                    card_id=card_id, 
+                    amount=amount, 
+                    date=date, 
+                    transaction_type="Transfer",
+                    is_manual=True
                 )
             )
             

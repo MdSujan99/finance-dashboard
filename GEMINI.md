@@ -22,8 +22,9 @@ This project follows a **Service-Oriented Architecture** with a unified backend 
 
 ## Data Integrity & Migration
 - **Non-Destructive Migration:** `migrate.py` clears ONLY Excel-sourced data. Records with `is_manual=True` are strictly preserved.
+- **Idempotency & Deduplication:** Transactions (Income, Expense, Payment) use SHA256 hashes (`entry_hash`) to prevent duplicates. Lendings use unique constraints on `(person, amount, due_date)`.
 - **Source Tracking:** All models contain an `is_manual` flag to distinguish between imported Excel data and UI-added records.
-- **Manual Data Entry:** Supported for Incomes, Expenses, Payments, Lendings, and EMIs across both UIs.
+- **Deduplication Logic:** `DataLoader` must ONLY fetch `is_manual=True` records from SQLite to avoid double-counting when merging with raw Excel data.
 
 ## Development & Security Standards
 - **Zero Business Logic in UI:** `main.py` and `dashboard.py` should only handle request/session state and rendering. All logic MUST reside in `FinanceService` or `FinanceCalculations`.

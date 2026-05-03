@@ -1,0 +1,65 @@
+==================================================
+        FINANCIAL INTELLIGENCE REPORT
+        Generated on: {{ now_date }}
+==================================================
+
+{% if sanity_warnings %}
+--- ATTENTION: DATA ANOMALIES DETECTED ---
+{% for warning in sanity_warnings %}
+{{ warning }}
+{% endfor %}
+
+{% endif %}
+--- FINANCIAL HEALTH METRICS ---
+Financial Runway:       {{ runway }} months
+Wealth Velocity:        ₹{{ wealth_velocity|format_currency }} / month
+Savings Rate:           {{ savings_rate }}%
+FI Ratio:               {{ fi_ratio }} years
+Liquidity:              ₹{{ liquidity|format_currency }} (Cash + Savings)
+Net Worth (Est.):       ₹{{ net_worth|format_currency }}
+
+--- FINANCIAL SUMMARY ---
+Total Cash:             ₹{{ total_cash|format_currency }}
+Total Savings:          ₹{{ total_savings|format_currency }}
+Total Assets:           ₹{{ total_assets|format_currency }}
+Total Credit Owed:      ₹{{ total_cc_used|format_currency }}
+Total Loan Owed:        ₹{{ total_loan_owed|format_currency }}
+Total Money Lent Out:   ₹{{ total_lent|format_currency }}
+Credit Utilisation:     {{ util_pct }}%
+Total Available Funds:  ₹{{ total_available_funds|format_currency }}
+
+--- BUDGET SUMMARY ---
+Expected Income:        ₹{{ monthly_income|format_currency }}
+Budgeted Monthly Burn:  ₹{{ monthly_expenses|format_currency }}
+Projected Savings:      ₹{{ (monthly_income - monthly_expenses)|format_currency }}
+
+--- ACTIVE LENDINGS ---
+{% if active_lendings %}
+{% for l in active_lendings %}
+- {{ l.person }}: ₹{{ l.amount|format_currency }} (Due: {{ l.due_date }}){% if l.overdue %} (OVERDUE){% endif %}
+{% endfor %}
+{% else %}
+No active lendings.
+{% endif %}
+
+--- ACTIVE EMIs ---
+{% if active_emis %}
+{% for emi in active_emis %}
+- {{ emi.item }}: ₹{{ emi.amount|format_currency }} ({{ emi.remaining }} months left)
+{% endfor %}
+{% else %}
+No active EMIs.
+{% endif %}
+
+--- RECENT PAYMENT TRENDS ---
+{% if payments_history %}
+{% for p in payments_history %}
+- {{ p.date }}: ₹{{ p.amount|format_currency }} to {{ p.card }}
+{% endfor %}
+{% else %}
+No recent payment history.
+{% endif %}
+
+==================================================
+             END OF REPORT
+==================================================
