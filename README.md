@@ -1,55 +1,47 @@
-# Personal Finance Dashboard
+# Personal Finance Intelligence Dashboard
 
-A comprehensive financial management suite featuring a robust PostgreSQL backend and a modern Streamlit intelligence dashboard.
+A comprehensive, dual-interface financial management suite. This application unifies your legacy Excel-based tracking with a modern SQL database, providing deep insights, interactive visualizations, and robust data persistence.
 
-## 📊 Streamlit Intelligence Dashboard (New)
-A high-performance visualization tool built with Streamlit and Plotly for deep financial insights.
+## 🚀 Key Features
 
-### Features
-- **Smart Data Loading**: Automatically detects and loads the most recent version of your data from either the root or uploads folder.
-- **Dynamic Summaries**: Real-time calculation of Net Worth, Asset Allocation, and Debt-to-Income metrics.
-- **Interactive Filtering**: Toggle between "Active Only" and "Full History" for Lendings, EMIs, and Loans.
-- **Credit Health Gauge**: Visual tracking of your total credit utilization across all cards.
-- **Goal Tracking**: Progress monitoring for financial goals (e.g., Emergency Fund) with estimated time to completion.
-- **Theme Support**: Fully responsive design with optimized visibility for both Light and Dark modes.
+### 📊 Intelligence Dashboard (Streamlit)
+*   **Advanced Metrics:** Real-time tracking of Financial Runway, Wealth Velocity, FI Ratio, and Savings Rate.
+*   **Rich Visualizations:** Interactive asset allocation, cash flow, and payment trend charts using Plotly and Altair.
+*   **Goal Forecasting:** Estimate time-to-completion for major financial milestones.
+*   **Credit Health:** Comprehensive monitoring of credit card limits, dues, and utilization.
 
-### Setup & Run
-```bash
-pip install streamlit plotly
-streamlit run dashboard.py
-```
+### 🌐 Management Web UI (FastAPI)
+*   **Centralized Data:** A clean web interface to view your financial snapshot.
+*   **Unified Backend:** Powered by a shared `FinanceService` and SQLite database (`finance.db`).
+*   **Security:** Production-ready error handling and secure logging.
 
----
-
-## 💻 Core Application (v2.0 - PostgreSQL)
-The underlying system built with FastAPI and SQLModel for data persistence and manual entries.
-
-### Features
-- **PostgreSQL Persistence**: Robust data storage for long-term tracking.
-- **Manual Data Entry**: Update balances, record payments, and log income directly.
-- **Excel Migration**: One-click "Sync" to populate the database from your master file.
-- **Modern UI**: Clean, high-contrast Beige, Black, Green, and Red palette.
+### 🛠 Robust Data Engine
+*   **Non-Destructive Sync:** Migrate data from `latest_finance.xlsx` without losing manually entered UI records.
+*   **Anchor-Based Parsing:** Intelligent Excel parsing that adapts to row/column shifts.
+*   **Enhanced Reporting:** Download professional, metric-rich text reports generated via Jinja2 templates.
 
 ---
 
-## 🚀 Installation & Setup
+## 🛠 Project Architecture
+
+| Component | Responsibility | Tech Stack |
+| :--- | :--- | :--- |
+| **`dashboard.py`** | Primary Visualization UI | Streamlit, Plotly |
+| **`main.py`** | Web Dashboard & Data Management | FastAPI, Jinja2 |
+| **`services.py`** | Centralized Service Layer | Python |
+| **`calculations.py`** | Core Financial Logic | Pandas |
+| **`models.py`** | Database Schema & Persistence | SQLModel, SQLite |
+| **`migrate.py`** | Excel-to-DB Migration Logic | SQLModel |
+
+---
+
+## 🏁 Quick Start
 
 ### 1. Prerequisites
-- Python 3.10+
-- **PostgreSQL** installed and running locally.
-- A database named `finance`.
+*   Python 3.10+
+*   An Excel file named `latest_finance.xlsx` in the root directory.
 
-### 2. Environment Configuration
-Create a `.env` file in the project root:
-```env
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=finance
-```
-
-### 3. Installation
+### 2. Installation
 ```bash
 # Create and activate virtual environment
 python3 -m venv venv
@@ -57,32 +49,35 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-pip install sqlmodel psycopg2-binary python-dotenv streamlit plotly
 ```
 
-### 4. Database Sync
-To populate the database from your Excel file:
+### 3. Initialize & Sync
+Populate the database from your Excel file:
 ```bash
 python3 migrate.py
 ```
 
-### 5. Running the Suite
-- **Intelligence Dashboard**: `streamlit run dashboard.py`
-- **Data Entry App**: `python3 main.py`
+### 4. Launch the Applications
+*   **Intelligence Dashboard:**
+    ```bash
+    streamlit run dashboard.py
+    ```
+*   **Management Web UI:**
+    ```bash
+    uvicorn main.py:app --reload
+    ```
 
 ---
 
-## 🛠 Project Structure
-- `dashboard.py`: Streamlit UI and visualizations.
-- `calculations.py`: Centralized business logic and metric formulas.
-- `data_loader.py`: Smart Excel parsing and cleaning logic.
-- `main.py`: FastAPI backend for manual data management.
-- `models.py`: SQLModel database schemas.
+## 🎨 Design Principles
+*   **Single Source of Truth:** All data is unified in `finance.db`.
+*   **Resiliency:** Use of labels instead of hardcoded indices for Excel parsing.
+*   **Modularity:** UI-agnostic service layer allows for easy extension.
 
 ---
 
-## 🎨 Design Language
-- **Background**: Light Beige / Theme-Aware Secondary
-- **Success**: Green (`#2ECC71`)
-- **Danger**: Red (`#E74C3C`)
-- **Action**: Black (`#000000`)
+## 📝 Reporting
+The system generates an enhanced **Financial Intelligence Report** (available in both UIs) containing:
+*   Summary Ledger (Assets, Cash, Savings, Debts).
+*   Health Metrics (Runway, Savings Rate, FI Ratio).
+*   Detailed Breakdowns (Active Lendings, EMIs, Payment Trends).

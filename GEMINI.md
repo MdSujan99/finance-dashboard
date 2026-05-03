@@ -1,37 +1,35 @@
 # Project Instructions: Finance Dashboard
 
 ## Architecture Overview
-This project contains two distinct UI implementations sharing a **unified backend architecture**.
+This project follows a **Service-Oriented Architecture** with a unified backend supporting dual UIs.
 
-### 1. Streamlit Implementation (Primary UI)
-- **Main File:** `dashboard.py`
-- **Title:** "Financial Intelligence Dashboard"
+### 1. Streamlit Implementation (Primary Intelligence UI)
 - **Entry Point:** `streamlit run dashboard.py`
-- **Features:** Interactive visualizations (Plotly, Altair), sidebar actions, and tab-based navigation.
+- **Role:** Deep visualizations, trends, and financial goal tracking.
+- **Tech:** Streamlit, Plotly, Altair.
 
-### 2. FastAPI Implementation (Secondary/Web UI)
-- **Main File:** `main.py`
-- **Templates:** `templates/dashboard.html`, `templates/upload.html`
-- **Entry Point:** `python3 main.py` or `uvicorn main.py:app`
-- **Database:** Uses SQLModel with SQLite for unified data persistence across both applications.
+### 2. FastAPI Implementation (Web / Data Entry UI)
+- **Entry Point:** `uvicorn main.py:app --port 8000`
+- **Role:** Web-based dashboard and forms for manual data management.
+- **Tech:** FastAPI, Jinja2 (Templates).
 
 ## Core Architecture Components
-- **Unified Service Layer:** `services.py` houses the `FinanceService` class. **Both UIs must use this service** to fetch data and trigger migrations.
-- **Data Loading:** `data_loader.py` handles parsing `latest_finance.xlsx` using **anchor-based searching** (robust against row/column shifts).
-- **Calculations:** `calculations.py` contains the core `FinanceCalculations` class for all business logic and financial metrics.
-- **Models:** `models.py` defines the SQLModel schema and unified database connection (`finance.db`).
-- **Utilities:** `utils.py` contains shared logic for currency cleaning and date formatting.
+- **Unified Service Layer (`services.py`):** Central entry point for all UI interactions. Encapsulates business logic, data fetching, and report generation via `FinanceService`.
+- **Data Persistence (`models.py`):** Uses **SQLModel + SQLite** (`finance.db`). This shared database ensures data parity between UIs.
+- **Business Logic (`calculations.py`):** Pure functional logic for financial metrics (Runway, FI Ratio, Wealth Velocity, etc.).
+- **Report Engine:** Uses Jinja2 templates (`templates/report.txt`) for high-quality, metric-rich text reports.
+- **Excel Parser (`data_loader.py`):** Features **anchor-based searching** to remain resilient against structural changes in `latest_finance.xlsx`.
 
-## Development Guidelines
-- **Logic Centralization:** Never implement business logic in `main.py` or `dashboard.py`. Always use `calculations.py` or `services.py`.
-- **Database Consistency:** Both applications share `finance.db`. Any data added via one UI will be visible in the other.
-- **Excel Robustness:** `data_loader.py` avoids hardcoded indices. When parsing new sections, use `utils.get_value_by_label`.
-- **Dual UI Sync:** When adding UI features, ensure they are implemented in BOTH `dashboard.py` and `templates/dashboard.html` to maintain parity.
+## Data Integrity & Migration
+- **Non-Destructive Migration:** `migrate.py` clears ONLY Excel-sourced data. Records with `is_manual=True` are strictly preserved.
+- **Source Tracking:** All models contain an `is_manual` flag to distinguish between imported Excel data and UI-added records.
+- **Manual Data Entry:** Supported for Incomes, Expenses, Payments, Lendings, and EMIs across both UIs.
 
-## Data Migration
-- **Script:** `migrate.py` performs a clean migration from Excel to the SQLite database.
-- **Trigger:** Handled automatically upon file upload in FastAPI or via the sidebar in Streamlit if data is missing.
+## Development & Security Standards
+- **Zero Business Logic in UI:** `main.py` and `dashboard.py` should only handle request/session state and rendering. All logic MUST reside in `FinanceService` or `FinanceCalculations`.
+- **Security Hardening:** FastAPI routes must use generic error messages. Detailed tracebacks are captured via internal `logging` to prevent information leakage.
+- **UI Parity:** New features must be reflected in both Streamlit and FastAPI templates unless they are purely visualization-focused.
+- **Anchor-Based Parsing:** When adding new Excel parsing logic, use `utils.get_value_by_label` instead of hardcoded row/column indices.
 
-## UI Customizations
-- **Credit Tab:** Unified view containing both Credit Card metrics and Payment Trends.
-- **Disabled Features:** "Quick Entry" (Streamlit) and "Manage Financial Data" (FastAPI) are currently disabled at the user's request. The code remains for reference but is hidden/non-functional in the primary UI.
+## UI State Configuration
+- **Disabled Features:** The "Quick Entry" (Streamlit) and "Manage Financial Data" (FastAPI) sections are functionally complete but **hidden/disabled** in the active UI at the user's request.
