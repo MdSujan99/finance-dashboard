@@ -469,8 +469,21 @@ def main():
 
     metrics = FinanceCalculations.get_summary_metrics(data)
 
+    # Sidebar Actions
+    st.sidebar.title("Actions")
+    report_text = FinanceCalculations.generate_report_text(data, metrics)
+    st.sidebar.download_button(
+        label="📥 Download Report",
+        data=report_text,
+        file_name=f"finance_report_{datetime.now().strftime('%Y%m%d')}.txt",
+        mime="text/plain"
+    )
+    
+    if st.sidebar.button("🔄 Refresh Data"):
+        st.rerun()
+
     # Top Navigation with split titles
-    tabs = st.tabs(["📊\nDashboard", "📈\nTrends", "📅\nBudget", "📝\nQuick Entry", "🤝\nLending", "🎯\nGoals"])
+    tabs = st.tabs(["📊\nDashboard", "📈\nTrends", "📅\nBudget", "🤝\nLending", "🎯\nGoals"])
     
     with tabs[0]:
         show_dashboard(data, metrics)
@@ -479,10 +492,8 @@ def main():
     with tabs[2]:
         show_budget(data)
     with tabs[3]:
-        show_quick_entry()
-    with tabs[4]:
         show_lending(data)
-    with tabs[5]:
+    with tabs[4]:
         show_goals(metrics)
 
 if __name__ == "__main__":

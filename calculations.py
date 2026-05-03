@@ -227,3 +227,93 @@ class FinanceCalculations:
             df = pd.concat([df, current_row], ignore_index=True)
             return df.sort_values('Date')
         return pd.DataFrame()
+
+    @staticmethod
+    def generate_report_text(data, metrics):
+        """Generates a text-based financial report."""
+        report = []
+        report.append("=" * 50)
+        report.append("FINANCIAL INTELLIGENCE REPORT")
+        report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append("=" * 50)
+        report.append("")
+
+        # 1. Financial Intelligence Summary
+        report.append("--- FINANCIAL SUMMARY ---")
+        report.append(f"Net Worth Estimate:      ₹{metrics.get('net_worth', 0):,.2f}")
+        report.append(f"Total Cash:              ₹{metrics.get('total_cash', 0):,.2f}")
+        report.append(f"Total Savings:           ₹{metrics.get('total_savings', 0):,.2f}")
+        report.append(f"Liquidity (Cash+Savings): ₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.2f}")
+        report.append(f"Total Credit Owed:       ₹{metrics.get('total_cc_used', 0):,.2f}")
+        report.append(f"Total Available Funds:   ₹{metrics.get('total_available_funds', 0):,.2f}")
+        report.append(f"Total Money Lent Out:    ₹{metrics.get('total_lent', 0):,.2f}")
+        report.append(f"Credit Utilisation:      {metrics.get('util_pct', 0)}%")
+        report.append("")
+
+        # 2. Budget Summary
+        report.append("--- BUDGET SUMMARY ---")
+        budget_df = data.get('budget', pd.DataFrame())
+        if not budget_df.empty:
+            total_budget_income = budget_df[budget_df['Category'] == 'Income']['Amount'].sum()
+            total_budget_expense = budget_df[budget_df['Category'] != 'Income']['Amount'].sum()
+            report.append(f"Expected Monthly Income:  ₹{total_budget_income:,.2f}")
+            report.append(f"Budgeted Monthly Burn:    ₹{total_budget_expense:,.2f}")
+            report.append(f"Projected Monthly Savings: ₹{total_budget_income - total_budget_expense:,.2f}")
+            report.append("")
+            
+            report.append("Detailed Budget Breakdown:")
+            current_cat = None
+            for _, item in budget_df.iterrows():
+                if item['Category'] != current_cat:
+                    current_cat = item['Category']
+                    report.append(f"  [{current_cat}]")
+                report.append(f"    - {item['Item']}: ₹{item['Amount']:,.2f}")
+        else:
+            report.append("No budget data available.")
+        report.append("")
+
+        # 3. Active Lendings
+        report.append("--- ACTIVE LENDINGS ---")
+        lendings_df = data.get('lendings', pd.DataFrame())
+        if not lendings_df.empty:
+            active_lend = lendings_df[lendings_df['isCleared'] != 'Yes'] if 'isCleared' in lendings_df.columns else lendings_df
+            for _, l in active_lend.iterrows():
+                due_date = l.get('Due Date', 'N/A')
+                is_overdue = False
+                if due_date != 'N/A':
+                    try:
+                        is_overdue = pd.to_datetime(due_date) < datetime.now()
+                    except:
+                        pass
+                status = " (OVERDUE)" if is_overdue else ""
+                report.append(f"- {l['Lent to']}: ₹{l.get('Amount Due', l.get('Amount Lent', 0)):,.2f} (Due: {due_date}){status}")
+        else:
+            report.append("No active lendings.")
+        report.append("")
+
+        # 4. Recent Trends (Payment History)
+        report.append("--- RECENT PAYMENT TRENDS ---")
+        payments_df = data.get('payments', pd.DataFrame())
+        if not payments_df.empty:
+            # Show last 10 payments
+            recent = payments_df.sort_values('Payment Date').tail(10)
+            for _, p in recent.iterrows():
+                report.append(f"- {p['Payment Date'].strftime('%Y-%m-%d')}: ₹{p['Amount Paid']:,.2f} to {p['Card Name']}")
+        else:
+            report.append("No recent payment history.")
+        report.append("")
+
+        # 5. Active EMIs
+        report.append("--- ACTIVE EMIs ---")
+        emis_df = data.get('emis', pd.DataFrame())
+        if not emis_df.empty:
+            active_emis = emis_df[emis_df['IsClosed'] == 'No'] if 'IsClosed' in emis_df.columns else emis_df
+            for _, emi in active_emis.iterrows():
+                emi_col = 'Amt Due' if 'Amt Due' in emi else 'EMI Amount'
+                rem_col = 'EMIs Remaining' if 'EMIs Remaining' in emi else 'Months Left'
+                report.append(f"- {emi.get('Provider', 'Unknown')}: ₹{emi.get(emi_col, 0):,.2f} ({emi.get(rem_col, 'N/A')} months left)")
+        else:
+            report.append("No active EMIs.")
+        report.append("")
+
+        return "\n".join(report)
