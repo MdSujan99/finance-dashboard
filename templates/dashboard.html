@@ -48,24 +48,33 @@
         }
         .kpi-card {
             background: var(--card-bg);
-            padding: 1.2rem;
-            border-radius: 12px;
-            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 20px;
+            border: 1px solid rgba(0,0,0,0.05);
             position: relative;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease;
         }
-        .kpi-label { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .kpi-value { font-size: 1.5rem; font-weight: 800; }
+        .kpi-label { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+        .kpi-value { font-size: 1.8rem; font-weight: 800; }
         .kpi-value.money::before { content: "₹"; margin-right: 2px; }
+
+        /* Theme Classes for Cards */
+        .card-income { background: linear-gradient(135deg, #f0f7ff 0%, #e6f2ff 100%); border-left: 8px solid #007bff !important; }
+        .card-expenses { background: linear-gradient(135deg, #fff5f5 0%, #fff0f0 100%); border-left: 8px solid #ff4d4f !important; }
+        .card-savings { background: linear-gradient(135deg, #f6ffed 0%, #f0f9eb 100%); border-left: 8px solid #52c41a !important; }
+        .card-personal { background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%); border-left: 8px solid #722ed1 !important; }
+        .card-non-personal { background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%); border-left: 8px solid #faad14 !important; }
+        .card-generic { background: linear-gradient(135deg, #f0fffb 0%, #e6fffb 100%); border-left: 8px solid #13c2c2 !important; }
 
         .formula-btn {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 15px;
+            right: 15px;
             width: 22px;
             height: 22px;
-            background: #f8f9fa;
-            border: 1px solid #eee;
+            background: rgba(255,255,255,0.8);
+            border: 1px solid rgba(0,0,0,0.05);
             border-radius: 4px;
             display: flex;
             align-items: center;
@@ -76,7 +85,7 @@
             transition: all 0.2s;
         }
         .formula-btn:hover {
-            background: #eee;
+            background: #fff;
             color: #000;
         }
 
@@ -90,9 +99,10 @@
         
         .section {
             background: var(--card-bg);
-            padding: 1.5rem;
-            border-radius: 12px;
-            border: 1px solid var(--border);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
         }
         .section h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 1.2rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
 
@@ -285,17 +295,17 @@
 
     <div id="dashboard-tab" class="tab-content">
         <div class="kpi-grid">
-            <div class="kpi-card">
+            <div class="kpi-card card-savings">
                 <div class="formula-btn" onclick="showFormula('Liquidity')">ƒ</div>
                 <div class="kpi-label">Total Cash</div>
                 <div class="kpi-value money">{{ "{:,.0f}".format(data.total_cash) }}</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card card-savings">
                 <div class="formula-btn" onclick="showFormula('Liquidity')">ƒ</div>
                 <div class="kpi-label">Total Savings</div>
                 <div class="kpi-value money">{{ "{:,.0f}".format(data.total_savings) }}</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card card-expenses">
                 <div class="formula-btn" onclick="showFormula('Credit Used')">ƒ</div>
                 <div class="kpi-label">Total Credit Used</div>
                 <div class="kpi-value money" style="color: var(--danger)">{{ "{:,.0f}".format(data.total_actual_used) }}</div>
@@ -303,7 +313,7 @@
                     Billed: {{ "{:,.0f}".format(data.total_cc_due) }}
                 </div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card card-generic">
                 <div class="formula-btn" onclick="showFormula('Total Available')">ƒ</div>
                 <div class="kpi-label">Total Available</div>
                 <div class="kpi-value money" style="color: var(--accent)">{{ "{:,.0f}".format(data.total_available_funds) }}</div>
@@ -311,12 +321,12 @@
                     Incl. Credit Available
                 </div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card card-personal">
                 <div class="formula-btn" onclick="showFormula('Net Worth')">ƒ</div>
                 <div class="kpi-label">Money Lent Out</div>
                 <div class="kpi-value money">{{ "{:,.0f}".format(data.total_lent) }}</div>
             </div>
-            <div class="kpi-card" style="background: rgba(0,128,0,0.02); border-color: var(--success);">
+            <div class="kpi-card card-savings" style="background: rgba(0,128,0,0.02); border-color: var(--success);">
                 <div class="formula-btn" onclick="showFormula('Net Worth')">ƒ</div>
                 <div class="kpi-label">Net Worth Estimate</div>
                 <div class="kpi-value money" style="color: var(--success)">{{ "{:,.0f}".format(data.net_worth) }}</div>

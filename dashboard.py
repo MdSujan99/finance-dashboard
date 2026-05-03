@@ -62,6 +62,115 @@ st.markdown("""
         font-size: 14px;
         line-height: 1.2;
     }
+
+    /* Modern Premium Styles */
+    .premium-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px 0;
+    }
+    
+    .premium-card {
+        padding: 24px;
+        border-radius: 20px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+        margin-bottom: 16px;
+    }
+    
+    .card-income { 
+        background: linear-gradient(135deg, #f0f7ff 0%, #e6f2ff 100%);
+        border-left: 8px solid #007bff; 
+    }
+    .card-expenses { 
+        background: linear-gradient(135deg, #fff5f5 0%, #fff0f0 100%);
+        border-left: 8px solid #ff4d4f; 
+    }
+    .card-savings { 
+        background: linear-gradient(135deg, #f6ffed 0%, #f0f9eb 100%);
+        border-left: 8px solid #52c41a; 
+    }
+    .card-personal {
+        background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%);
+        border-left: 8px solid #722ed1;
+    }
+    .card-non-personal {
+        background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
+        border-left: 8px solid #faad14;
+    }
+    .card-generic {
+        background: linear-gradient(135deg, #f0fffb 0%, #e6fffb 100%);
+        border-left: 8px solid #13c2c2;
+    }
+    
+    .card-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        margin-bottom: 8px;
+    }
+    .card-value {
+        font-size: 32px;
+        font-weight: 800;
+        color: #111;
+        line-height: 1;
+    }
+    
+    .category-card {
+        padding: 32px;
+        border-radius: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        margin-bottom: 32px;
+        background: white;
+    }
+    .category-header {
+        font-size: 20px;
+        font-weight: 800;
+        color: #111;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid rgba(0,0,0,0.05);
+        padding-bottom: 16px;
+    }
+    .cat-total {
+        font-size: 22px;
+        font-weight: 700;
+        color: #000;
+    }
+    
+    .budget-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 14px 0;
+        border-bottom: 1px solid #fcfcfc;
+        align-items: center;
+    }
+    .row-label { 
+        font-size: 16px; 
+        font-weight: 500;
+        color: #444; 
+    }
+    .row-amount { 
+        font-size: 18px; 
+        font-weight: 700; 
+        color: #000; 
+    }
+    
+    .subcategory-header {
+        font-weight: 800;
+        font-size: 13px;
+        color: #999;
+        margin-top: 24px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,36 +179,36 @@ def show_dashboard(data, metrics):
     
     explanations = FinanceCalculations.get_metric_explanations(metrics)
 
-    def render_card(label, value, col):
+    def render_premium_card(label, value, theme_class, col):
         with col:
-            with st.container(border=True):
-                # Using columns inside container to place button top-right
-                c1, c2 = st.columns([4, 1])
-                with c1:
-                    st.metric(label, value)
-                with c2:
-                    with st.popover("ƒ", help="Calculation Details"):
-                        st.markdown(f"### {label}")
-                        st.code(explanations.get(label.split(" ", 1)[-1], "No details"), language="text")
+            st.markdown(f"""
+                <div class="premium-card {theme_class}">
+                    <div class="card-label">{label}</div>
+                    <div class="card-value">{value}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            with st.popover("ƒ", help="Calculation Details"):
+                st.markdown(f"### {label}")
+                st.code(explanations.get(label.split(" ", 1)[-1], "No details"), language="text")
 
     # --- Top Row Metrics ---
     cols1 = st.columns(5)
-    render_card("💰 Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}", cols1[0])
-    render_card("🚀 Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo", cols1[1])
-    render_card("🏖️ FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs", cols1[2])
-    render_card("🛫 Runway", f"{metrics.get('runway', 0)} Mo", cols1[3])
-    render_card("📈 Savings Rate", f"{metrics.get('savings_rate', 0)}%", cols1[4])
+    render_premium_card("💰 Net Worth", f"₹{metrics.get('net_worth', 0):,.0f}", "card-savings", cols1[0])
+    render_premium_card("🚀 Wealth Velocity", f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo", "card-income", cols1[1])
+    render_premium_card("🏖️ FI Ratio", f"{metrics.get('fi_ratio', 0)} Yrs", "card-personal", cols1[2])
+    render_premium_card("🛫 Runway", f"{metrics.get('runway', 0)} Mo", "card-non-personal", cols1[3])
+    render_premium_card("📈 Savings Rate", f"{metrics.get('savings_rate', 0)}%", "card-generic", cols1[4])
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     # --- Bottom Row Metrics ---
     cols2 = st.columns(6)
-    render_card("💵 Monthly Income", f"₹{metrics.get('monthly_income', 0):,.0f}", cols2[0])
-    render_card("🔥 Monthly Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}", cols2[1])
-    render_card("💳 Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}", cols2[2])
-    render_card("📊 Utilisation", f"{metrics.get('util_pct', 0)}%", cols2[3])
-    render_card("💧 Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}", cols2[4])
-    render_card("🏦 Total Available", f"₹{metrics.get('total_available_funds', 0):,.0f}", cols2[5])
+    render_premium_card("💵 Income", f"₹{metrics.get('monthly_income', 0):,.0f}", "card-income", cols2[0])
+    render_premium_card("🔥 Burn", f"₹{metrics.get('monthly_expenses', 0):,.0f}", "card-expenses", cols2[1])
+    render_premium_card("💳 Credit Used", f"₹{metrics.get('total_cc_used', 0):,.0f}", "card-expenses", cols2[2])
+    render_premium_card("📊 Utilisation", f"{metrics.get('util_pct', 0)}%", "card-expenses" if metrics.get('util_pct', 0) > 30 else "card-generic", cols2[3])
+    render_premium_card("💧 Liquidity", f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}", "card-savings", cols2[4])
+    render_premium_card("🏦 Available", f"₹{metrics.get('total_available_funds', 0):,.0f}", "card-generic", cols2[5])
 
     st.divider()
 
@@ -228,6 +337,7 @@ def show_lending(data):
     st.title("Lendings & Loans 🤝")
     col_l, col_r = st.columns(2)
     with col_l:
+        st.markdown('<div class="category-card">', unsafe_allow_html=True)
         st.subheader("Repayment Tracker")
         lend_df = data['lendings']
         show_active_lend = st.checkbox("Show Active Only", value=True)
@@ -236,7 +346,9 @@ def show_lending(data):
         else: lend_display = lend_df.copy()
         l_cols = ['Lent to', 'Amount Lent', 'Amount Due', 'Due Date', 'isCleared']
         st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], width="stretch")
+        st.markdown('</div>', unsafe_allow_html=True)
         
+        st.markdown('<div class="category-card">', unsafe_allow_html=True)
         st.subheader("EMI Obligations")
         # EXCLUDED_OWNERS defined at top of dashboard.py or calculations.py
         emi_df = data['emis']
@@ -246,15 +358,19 @@ def show_lending(data):
         if not emi_display.empty and 'Actual Owner' in emi_display.columns:
             emi_display = emi_display[~emi_display['Actual Owner'].isin(EXCLUDED_OWNERS)]
         st.table(emi_display)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r:
+        st.markdown('<div class="category-card">', unsafe_allow_html=True)
         st.subheader("Money Owed (Loans)")
         loan_df = data['loans']
         loan_display = loan_df[(loan_df['Cleared'] == 'No') & (loan_df['own'] == 'Yes')].copy() if not loan_df.empty else loan_df
         st.dataframe(loan_display, width="stretch")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 def show_goals(metrics):
     st.title("Goals & Wishlist 🎯")
+    st.markdown('<div class="category-card">', unsafe_allow_html=True)
     target = 400000
     current = metrics.get('total_savings', 0)
     progress = min(current/target, 1.0)
@@ -265,6 +381,7 @@ def show_goals(metrics):
     
     forecast_msg = FinanceCalculations.get_goal_forecast(metrics, target)
     st.success(f"**Estimated Completion:** {forecast_msg}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_budget(data):
     st.title("Monthly Budget 📊")
@@ -281,136 +398,17 @@ def show_budget(data):
     expenses = budget_df[budget_df['Category'] != 'Income']['Amount'].sum()
     savings_plan = income - expenses
 
-    st.markdown("""
-        <style>
-        /* Modern Premium Budget Styles */
-        .budget-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px 0;
-        }
-        
-        .budget-summary-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 32px;
-            margin-bottom: 40px;
-        }
-        
-        .budget-card {
-            padding: 32px;
-            border-radius: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-            border: 1px solid rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
-        }
-        
-        .card-income { 
-            background: linear-gradient(135deg, #f0f7ff 0%, #e6f2ff 100%);
-            border-left: 8px solid #007bff; 
-        }
-        .card-expenses { 
-            background: linear-gradient(135deg, #fff5f5 0%, #fff0f0 100%);
-            border-left: 8px solid #ff4d4f; 
-        }
-        .card-savings { 
-            background: linear-gradient(135deg, #f6ffed 0%, #f0f9eb 100%);
-            border-left: 8px solid #52c41a; 
-        }
-        .card-personal {
-            background: linear-gradient(135deg, #f9f0ff 0%, #f3e6ff 100%);
-            border-left: 8px solid #722ed1;
-        }
-        .card-non-personal {
-            background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
-            border-left: 8px solid #faad14;
-        }
-        .card-generic {
-            background: linear-gradient(135deg, #f0fffb 0%, #e6fffb 100%);
-            border-left: 8px solid #13c2c2;
-        }
-        
-        .card-label {
-            font-size: 15px;
-            font-weight: 600;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            margin-bottom: 12px;
-        }
-        .card-value {
-            font-size: 40px;
-            font-weight: 800;
-            color: #111;
-            line-height: 1;
-        }
-        
-        .category-card {
-            padding: 32px;
-            border-radius: 20px;
-            border: 1px solid rgba(0,0,0,0.05);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-            margin-bottom: 32px;
-            transition: transform 0.2s ease;
-        }
-        .category-header {
-            font-size: 20px;
-            font-weight: 800;
-            color: #111;
-            margin-bottom: 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid rgba(0,0,0,0.05);
-            padding-bottom: 16px;
-        }
-        .cat-total {
-            font-size: 22px;
-            font-weight: 700;
-            color: #000;
-        }
-        
-        .budget-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 14px 0;
-            border-bottom: 1px solid #fcfcfc;
-            align-items: center;
-        }
-        .row-label { 
-            font-size: 16px; 
-            font-weight: 500;
-            color: #444; 
-        }
-        .row-amount { 
-            font-size: 18px; 
-            font-weight: 700; 
-            color: #000; 
-        }
-        
-        .subcategory-header {
-            font-weight: 800;
-            font-size: 13px;
-            color: #999;
-            margin-top: 24px;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
     # Wrap content in a focused container
-    st.markdown('<div class="budget-container">', unsafe_allow_html=True)
+    st.markdown('<div class="premium-container">', unsafe_allow_html=True)
 
     # Summary Cards
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown(f'<div class="budget-card card-income"><div class="card-label">Expected Income</div><div class="card-value">₹{income:,.0f}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="premium-card card-income"><div class="card-label">Expected Income</div><div class="card-value">₹{income:,.0f}</div></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown(f'<div class="budget-card card-expenses"><div class="card-label">Budgeted Burn</div><div class="card-value">₹{expenses:,.0f}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="premium-card card-expenses"><div class="card-label">Budgeted Burn</div><div class="card-value">₹{expenses:,.0f}</div></div>', unsafe_allow_html=True)
     with col3:
-        st.markdown(f'<div class="budget-card card-savings"><div class="card-label">Projected Savings</div><div class="card-value">₹{savings_plan:,.0f}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="premium-card card-savings"><div class="card-label">Projected Savings</div><div class="card-value">₹{savings_plan:,.0f}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 48px;'></div>", unsafe_allow_html=True)
 
