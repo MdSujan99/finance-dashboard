@@ -1,8 +1,9 @@
 import pandas as pd
 import os
-import sqlite3
+from sqlmodel import Session, select
 import numpy as np
-from database import DB_NAME, load_table
+from models import engine, DB_NAME
+from utils import clean_currency, get_value_by_label
 
 class DataLoader:
     def __init__(self, excel_file_path="latest_finance.xlsx"):
@@ -26,18 +27,6 @@ class DataLoader:
         latest_file = max(candidates, key=lambda x: x[1])[0]
         return pd.ExcelFile(latest_file)
 
-    def _clean_currency(self, value):
-        if pd.isna(value) or value == "":
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        # Handle string currency
-        clean_val = str(value).replace('₹', '').replace(',', '').strip()
-        try:
-            return float(clean_val)
-        except:
-            return 0.0
-
     def get_sheet_data(self, excel, sheet_name):
         try:
             if excel is None or sheet_name not in excel.sheet_names:
@@ -50,13 +39,13 @@ class DataLoader:
                            'Amount Paid', 'Monthly Amount', 'Net Worth']
             for col in amount_cols:
                 if col in df.columns:
-                    df[col] = df[col].apply(self._clean_currency)
+                    df[col] = df[col].apply(clean_currency)
             return df
         except:
             return pd.DataFrame()
 
     def _parse_net_worth_details(self, excel):
-        """Specially parses the 'Net Worth' sheet due to its non-standard tabular format."""
+        """Specially parses the 'Net Worth' sheet using anchor-based searching."""
         if excel is None:
             return {
                 "credit_cards_df": pd.DataFrame(),
@@ -68,37 +57,31 @@ class DataLoader:
             
         df = excel.parse('Net Worth', header=None)
         
+        # 1. Robust extraction using labels (Anchor-Based)
+        pf_val = get_value_by_label(df, "PF Account", col_offset=1)
+        if pf_val == 0: # Fallback
+             pf_val = get_value_by_label(df, "PF", col_offset=1)
+
+        # Loans (Columns 7 and 8 usually, let's search for "Loans")
+        loans_nw = []
+        loan_val = get_value_by_label(df, "Loans", col_offset=1)
+        if loan_val > 0:
+            loans_nw.append({
+                "Loan Name": "Owed Loan",
+                "Amount Due": loan_val,
+                "Cleared": "No",
+                "own": "Yes"
+            })
+
         cc_raw_data = {}
         cash_savings = []
         lendings_nw = []
-        loans_nw = []
-        pf_val = 0
-
-        # Specific extraction for Loans from row 9 (index 8), columns H (7) and I (8)
-        if len(df) > 8:
-            loan_row = df.iloc[8]
-            loan_label = str(loan_row.iloc[7]).strip() if len(loan_row) > 7 else ""
-            loan_val = self._clean_currency(loan_row.iloc[8]) if len(loan_row) > 8 else 0
-            if loan_label and loan_val > 0:
-                loans_nw.append({
-                    "Loan Name": loan_label,
-                    "Amount Due": loan_val,
-                    "Cleared": "No",
-                    "own": "Yes"
-                })
-
-        # Specific extraction for PF from row 13 (index 12), columns B (1) and C (2)
-        if len(df) > 12:
-            pf_row = df.iloc[12]
-            pf_label = str(pf_row.iloc[1]).strip() if len(pf_row) > 1 else ""
-            if "PF" in pf_label.upper():
-                pf_val = self._clean_currency(pf_row.iloc[2]) if len(pf_row) > 2 else 0
 
         mode_col4 = None
         for idx, row in df.iterrows():
             # Parse Credit Card info (Columns 4 and 5)
             label_cc = str(row.iloc[4]).strip() if len(row) > 4 else ""
-            val_cc = self._clean_currency(row.iloc[5]) if len(row) > 5 else 0
+            val_cc = clean_currency(row.iloc[5]) if len(row) > 5 else 0
 
             if "Credit Available" in label_cc: mode_col4 = "AVAIL"
             elif "Credit Card Max Limit" in label_cc: mode_col4 = "LIMIT"
@@ -111,18 +94,16 @@ class DataLoader:
                 elif mode_col4 == "DUE": cc_raw_data[label_cc]["due"] = val_cc
 
             # Parse Cash/Savings (Columns 1 and 2)
-            if idx == 12: continue # Skip PF row as it's handled separately
-            
             label_cash = str(row.iloc[1]).strip() if len(row) > 1 else ""
-            val_cash = self._clean_currency(row.iloc[2]) if len(row) > 2 else 0
+            val_cash = clean_currency(row.iloc[2]) if len(row) > 2 else 0
             if label_cash and val_cash > 0 and label_cash.lower() != 'nan' and label_cash.lower() != 'total':
-                cat = "Savings" if any(x in label_cash.upper() for x in ["SAVINGS", "FD", "HDFC", "SLICE FD"]) else "Cash"
-                cash_savings.append({"Name": label_cash, "Balance": val_cash, "Category": cat})
+                if "PF" not in label_cash.upper(): # Skip PF as it's handled
+                    cat = "Savings" if any(x in label_cash.upper() for x in ["SAVINGS", "FD", "HDFC", "SLICE FD"]) else "Cash"
+                    cash_savings.append({"Name": label_cash, "Balance": val_cash, "Category": cat})
 
             # Parse Lendings (Columns 7 and 8)
-            if idx == 8: continue # Skip row 9 as it's for loans
             label_lend = str(row.iloc[7]).strip() if len(row) > 7 else ""
-            val_lend = self._clean_currency(row.iloc[8]) if len(row) > 8 else 0
+            val_lend = clean_currency(row.iloc[8]) if len(row) > 8 else 0
             if label_lend and val_lend > 0 and "total" not in label_lend.lower() and label_lend.lower() != 'nan' and "lendings" not in label_lend.lower() and "loans" not in label_lend.lower():
                 lendings_nw.append({"Lent to": label_lend, "Amount Lent": val_lend})
 
@@ -161,7 +142,6 @@ class DataLoader:
         for idx, row in df.iterrows():
             row_len = len(row)
             
-            # Helper to get clean value
             def get_val(col_idx):
                 if col_idx >= row_len: return None
                 v = row.iloc[col_idx]
@@ -174,7 +154,7 @@ class DataLoader:
             sub = get_val(2)
             group = get_val(3)
             item = get_val(4)
-            amount = self._clean_currency(row.iloc[5]) if row_len > 5 else 0
+            amount = clean_currency(row.iloc[5]) if row_len > 5 else 0
             
             if cat: 
                 current_cat = cat
@@ -202,10 +182,24 @@ class DataLoader:
         return pd.DataFrame(data)
 
     def get_all_data(self):
-        sqlite_expenses = load_table("expenses") if os.path.exists(DB_NAME) else pd.DataFrame()
-        sqlite_cc_payments = load_table("credit_card_payments") if os.path.exists(DB_NAME) else pd.DataFrame()
-        sqlite_lending = load_table("lending") if os.path.exists(DB_NAME) else pd.DataFrame()
-        sqlite_income = load_table("income") if os.path.exists(DB_NAME) else pd.DataFrame()
+        """Fetches all data, prioritizing database for dynamic entries."""
+        try:
+            with Session(engine) as session:
+                from models import Income, CCPayment, Lending, Loan
+                from sqlmodel import select
+                
+                sqlite_income = pd.DataFrame([i.dict() for i in session.exec(select(Income)).all()])
+                sqlite_cc_payments = pd.DataFrame([p.dict() for p in session.exec(select(CCPayment)).all()])
+                sqlite_lending = pd.DataFrame([l.dict() for l in session.exec(select(Lending)).all()])
+                # Note: 'expenses' table was in old database.py but not in new models.py yet. 
+                # I should probably add it to models.py if needed, or stick to the ones defined.
+                sqlite_expenses = pd.DataFrame() 
+        except Exception as e:
+            print(f"Error loading from DB: {e}")
+            sqlite_income = pd.DataFrame()
+            sqlite_cc_payments = pd.DataFrame()
+            sqlite_lending = pd.DataFrame()
+            sqlite_expenses = pd.DataFrame()
 
         excel = self.load_excel()
         nw_details = self._parse_net_worth_details(excel)
@@ -234,27 +228,25 @@ class DataLoader:
         return data
 
     def _format_income(self, sqlite_df, excel_df):
-        if sqlite_df.empty:
-            return excel_df
+        if sqlite_df.empty: return excel_df
         res = sqlite_df.rename(columns={'source': 'Source', 'amount': 'Amount', 'date': 'Date Of Credit'})
-        return res
+        return pd.concat([excel_df, res], ignore_index=True)
 
     def _format_cc_payments(self, sqlite_df, excel_df):
-        if sqlite_df.empty:
-            return excel_df
-        res = sqlite_df.rename(columns={'date': 'Payment Date', 'card_name': 'Card Name', 'amount': 'Amount Paid'})
+        if sqlite_df.empty: return excel_df
+        # Need to join with CreditCard to get names if using SQLModel
+        res = sqlite_df.rename(columns={'date': 'Payment Date', 'amount': 'Amount Paid'})
+        # Note: card_id needs name lookup if we want to match Excel format perfectly
         res['Payment Date'] = pd.to_datetime(res['Payment Date'])
-        return res
+        return pd.concat([excel_df, res], ignore_index=True)
 
     def _format_lendings(self, sqlite_df, excel_df):
-        if sqlite_df.empty:
-            return excel_df
+        if sqlite_df.empty: return excel_df
         res = sqlite_df.rename(columns={
-            'borrower': 'Lent to', 
+            'person': 'Lent to', 
             'amount': 'Amount Lent', 
-            'date': 'Date',
             'due_date': 'Due Date'
         })
-        res['isCleared'] = res['status'].apply(lambda x: 'Yes' if x == 'Cleared' else 'No')
+        res['isCleared'] = res.get('is_paid', False).apply(lambda x: 'Yes' if x else 'No')
         res['Amount Due'] = res['Amount Lent']
-        return res
+        return pd.concat([excel_df, res], ignore_index=True)

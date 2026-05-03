@@ -1,36 +1,37 @@
 # Project Instructions: Finance Dashboard
 
 ## Architecture Overview
-This project contains two distinct implementations of the Financial Dashboard. Always clarify which one the user is currently interacting with.
+This project contains two distinct UI implementations sharing a **unified backend architecture**.
 
 ### 1. Streamlit Implementation (Primary UI)
 - **Main File:** `dashboard.py`
 - **Title:** "Financial Intelligence Dashboard"
 - **Entry Point:** `streamlit run dashboard.py`
-- **Features:** Richer visualizations (Plotly, Altair), sidebar actions, and tab-based navigation (Dashboard, Credit, Budget, Lending, Goals).
+- **Features:** Interactive visualizations (Plotly, Altair), sidebar actions, and tab-based navigation.
 
 ### 2. FastAPI Implementation (Secondary/Web UI)
 - **Main File:** `main.py`
 - **Templates:** `templates/dashboard.html`, `templates/upload.html`
 - **Entry Point:** `python3 main.py` or `uvicorn main.py:app`
-- **Database:** Uses SQLModel (PostgreSQL/SQLite) for data persistence.
+- **Database:** Uses SQLModel with SQLite for unified data persistence across both applications.
 
-## Common Components
-- **Data Loading:** `data_loader.py` handles parsing the `latest_finance.xlsx` file.
-- **Calculations:** `calculations.py` contains the core `FinanceCalculations` class. **All business logic and report generation should reside here** to ensure consistency across both implementations.
-- **Models:** `models.py` defines the SQLModel schema used by the FastAPI implementation.
+## Core Architecture Components
+- **Unified Service Layer:** `services.py` houses the `FinanceService` class. **Both UIs must use this service** to fetch data and trigger migrations.
+- **Data Loading:** `data_loader.py` handles parsing `latest_finance.xlsx` using **anchor-based searching** (robust against row/column shifts).
+- **Calculations:** `calculations.py` contains the core `FinanceCalculations` class for all business logic and financial metrics.
+- **Models:** `models.py` defines the SQLModel schema and unified database connection (`finance.db`).
+- **Utilities:** `utils.py` contains shared logic for currency cleaning and date formatting.
 
-## Development Pitfalls
-- **Dual UI Sync:** When adding UI features (like buttons or reports), ensure they are implemented in BOTH `dashboard.py` (Streamlit) and `templates/dashboard.html` (FastAPI/Jinja2) unless specified otherwise.
-- **Data Source:** The project relies heavily on `latest_finance.xlsx`. Modifications to the Excel structure require updates to `data_loader.py`.
-- **Database vs. Excel:** The FastAPI version migrates Excel data to a database, while Streamlit primarily reads from Excel. Be mindful of which data source is being used.
+## Development Guidelines
+- **Logic Centralization:** Never implement business logic in `main.py` or `dashboard.py`. Always use `calculations.py` or `services.py`.
+- **Database Consistency:** Both applications share `finance.db`. Any data added via one UI will be visible in the other.
+- **Excel Robustness:** `data_loader.py` avoids hardcoded indices. When parsing new sections, use `utils.get_value_by_label`.
+- **Dual UI Sync:** When adding UI features, ensure they are implemented in BOTH `dashboard.py` and `templates/dashboard.html` to maintain parity.
 
-## Reports
-- Text reports are generated via `FinanceCalculations.generate_report_text(data, metrics)`.
-- **FastAPI Route:** `/download_report`
-- **Streamlit Button:** Located in the sidebar.
+## Data Migration
+- **Script:** `migrate.py` performs a clean migration from Excel to the SQLite database.
+- **Trigger:** Handled automatically upon file upload in FastAPI or via the sidebar in Streamlit if data is missing.
 
 ## UI Customizations
-- **Credit Tab:** Replaced the "Trends" tab. Now contains both detailed Credit Card metrics (Limit, Due, Available) and the Payment Trends charts.
-- **Quick Entry / Manage Data:** The "Quick Entry" tab (Streamlit) and "Manage Financial Data" section (FastAPI) have been **disabled** at the user's request. 
-    - The code for these features remains in `dashboard.py` (`show_quick_entry`) and `templates/dashboard.html` (inside a `display: none` div) but should not be rendered in the active UI.
+- **Credit Tab:** Unified view containing both Credit Card metrics and Payment Trends.
+- **Disabled Features:** "Quick Entry" (Streamlit) and "Manage Financial Data" (FastAPI) are currently disabled at the user's request. The code remains for reference but is hidden/non-functional in the primary UI.

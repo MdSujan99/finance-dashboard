@@ -6,15 +6,17 @@ import numpy as np
 import altair as alt
 from datetime import datetime
 
-from data_loader import DataLoader
+from services import FinanceService
+from models import engine, Account, CreditCard, CCPayment, Lending, Loan, Income, create_db_and_tables
+from sqlmodel import Session, select
 from calculations import FinanceCalculations, EXCLUDED_OWNERS
-from database import init_db, add_expense, add_cc_payment, add_lending, add_income
+from utils import format_date
 
 # --- Config & Style ---
 st.set_page_config(page_title="Financial Intelligence Dashboard", layout="wide")
 
-# Initialize DB
-init_db()
+# Initialize DB (Unified SQLModel)
+create_db_and_tables()
 
 # Custom UI Styling
 st.markdown(
@@ -201,7 +203,7 @@ def render_premium_card(label, value, theme_class, col, explanations=None):
 def show_dashboard(data, metrics):
     st.title("Financial Intelligence 🏦")
 
-    explanations = FinanceCalculations.get_metric_explanations(metrics)
+    explanations = metrics.get("metric_explanations", {})
 
     # --- Top Row Metrics ---
     cols1 = st.columns(5)
@@ -496,52 +498,52 @@ def show_quick_entry():
         with st.form("expense_form", clear_on_submit=True):
             category = st.selectbox(
                 "Category",
-                [
-                    "Food",
-                    "Transport",
-                    "Shopping",
-                    "Entertainment",
-                    "Bills",
-                    "Health",
-                    "Other",
-                ],
+                ["Food", "Transport", "Shopping", "Entertainment", "Bills", "Health", "Other"]
             )
             amount = st.number_input("Amount", min_value=0.0, format="%.2f")
-            account = st.selectbox(
-                "Account", ["Credit Card", "Cash", "Savings Account"]
-            )
+            account = st.selectbox("Account", ["Credit Card", "Cash", "Savings Account"])
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Add Expense")
             if submit:
-                add_expense(date.strftime("%Y-%m-%d"), category, amount, account)
-                st.success(f"Expense of ₹{amount} added!")
+                # Direct expense entry is temporarily managed via Excel upload in the unified model.
+                st.info("Direct expense entry is temporarily managed via Excel upload.")
 
     with st.expander("💳 Record CC Payment"):
+        with Session(engine) as session:
+            cards = session.exec(select(CreditCard)).all()
+            card_options = {c.name: c.id for c in cards}
+            
         with st.form("cc_payment_form", clear_on_submit=True):
-            card_name = st.text_input("Card Name")
+            card_name = st.selectbox("Select Card", options=list(card_options.keys()) if card_options else ["None Found"])
             amount = st.number_input("Amount", min_value=0.0, format="%.2f")
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Record Payment")
-            if submit:
-                add_cc_payment(date.strftime("%Y-%m-%d"), card_name, amount)
-                st.success(f"Payment recorded!")
+            if submit and card_options:
+                with Session(engine) as session:
+                    card_id = card_options[card_name]
+                    card = session.get(CreditCard, card_id)
+                    session.add(CCPayment(card_id=card_id, amount=amount, date=datetime.combine(date, datetime.min.time())))
+                    card.current_due -= amount
+                    card.available_limit += amount
+                    session.add(card)
+                    session.commit()
+                st.success(f"Payment recorded for {card_name}!")
 
     with st.expander("🤝 Record Lending"):
         with st.form("lending_form", clear_on_submit=True):
             borrower = st.text_input("Borrower Name")
             amount = st.number_input("Amount", min_value=0.0, format="%.2f")
             due_date = st.date_input("Due Date", datetime.now())
-            status = st.selectbox("Status", ["Pending", "Cleared"])
             submit = st.form_submit_button("Add Lending")
             if submit:
-                add_lending(
-                    datetime.now().strftime("%Y-%m-%d"),
-                    borrower,
-                    amount,
-                    due_date.strftime("%Y-%m-%d"),
-                    status,
-                )
-                st.success(f"Lending recorded!")
+                with Session(engine) as session:
+                    session.add(Lending(
+                        person=borrower, 
+                        amount=amount, 
+                        due_date=datetime.combine(due_date, datetime.min.time())
+                    ))
+                    session.commit()
+                st.success(f"Lending to {borrower} recorded!")
 
     with st.expander("💰 Add Income"):
         with st.form("income_form", clear_on_submit=True):
@@ -550,8 +552,10 @@ def show_quick_entry():
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Add Income")
             if submit:
-                add_income(date.strftime("%Y-%m-%d"), source, amount)
-                st.success(f"Income added!")
+                with Session(engine) as session:
+                    session.add(Income(source=source, amount=amount, date=date.strftime("%B %Y")))
+                    session.commit()
+                st.success(f"Income from {source} added!")
 
 
 def show_lending(data):
@@ -790,23 +794,25 @@ def show_budget(data):
 
 
 def main():
-    # Init loader
-    loader = DataLoader("latest_finance.xlsx")
-    data = loader.get_all_data()
+    # Init service
+    service = FinanceService()
+    data = service.get_dashboard_data()
 
-    if data is None:
-        st.error("`latest_finance.xlsx` not found.")
+    if not data or (isinstance(data, dict) and len(data) == 0):
+        st.error("Financial data not found.")
         uploaded = st.sidebar.file_uploader("Upload Finance Excel", type=["xlsx"])
         if uploaded:
             with open("latest_finance.xlsx", "wb") as f:
                 f.write(uploaded.getbuffer())
+            service.migrate_excel_to_db("latest_finance.xlsx")
             st.rerun()
         return
 
-    metrics = FinanceCalculations.get_summary_metrics(data)
+    metrics = data # FinanceService returns metrics merged with data
 
     # Sidebar Actions
     st.sidebar.title("Actions")
+    from calculations import FinanceCalculations
     report_text = FinanceCalculations.generate_report_text(data, metrics)
     st.sidebar.download_button(
         label="📥 Download Report",

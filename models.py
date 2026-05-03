@@ -54,19 +54,18 @@ class Income(SQLModel, table=True):
     amount: float
     date: str  # e.g., "June 2025"
 
-# Database Engine Configuration (PostgreSQL)
-db_user = os.getenv("DB_USER", "postgres")
-db_password = os.getenv("DB_PASSWORD", "secret")
-db_host = os.getenv("DB_HOST", "localhost")
-db_port = os.getenv("DB_PORT", "5432")
-db_name = os.getenv("DB_NAME", "finance")
+# Database Engine Configuration (SQLite by default for unified access)
+DB_NAME = "finance.db"
+sqlite_url = f"sqlite:///{DB_NAME}"
 
-# Construct Postgres connection string
-postgres_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-engine = create_engine(postgres_url, echo=False)
+engine = create_engine(sqlite_url, echo=False, connect_args={"check_same_thread": False})
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
 def drop_db_and_tables():
     SQLModel.metadata.drop_all(engine)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
