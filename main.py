@@ -167,6 +167,16 @@ class FinanceService:
         from calculations import FinanceCalculations
         data['metric_explanations'] = FinanceCalculations.get_metric_explanations(data)
 
+        # 9. Budget (from Excel fallback as it's not yet in SQLite)
+        from data_loader import DataLoader
+        loader = DataLoader("latest_finance.xlsx")
+        excel = loader.load_excel()
+        budget_df = loader._parse_monthly_budget(excel)
+        if not budget_df.empty:
+            data['budget'] = budget_df.to_dict('records')
+        else:
+            data['budget'] = []
+
         return data
 
 

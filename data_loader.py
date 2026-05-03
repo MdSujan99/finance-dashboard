@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import sqlite3
+import numpy as np
 from database import DB_NAME, load_table
 
 class DataLoader:
@@ -143,10 +144,64 @@ class DataLoader:
             "pf_value": pf_val
         }
 
-    def get_all_data(self):
-        if not os.path.exists(DB_NAME):
-            pass
+    def _parse_monthly_budget(self, excel):
+        """Parses the 'Monthly Budget' sheet with its hierarchical structure."""
+        if excel is None:
+            return pd.DataFrame()
+        
+        if 'Monthly Budget' not in excel.sheet_names:
+            return pd.DataFrame()
             
+        df = excel.parse('Monthly Budget', header=None)
+        data = []
+        current_cat = None
+        current_sub = None
+        current_group = None
+
+        for idx, row in df.iterrows():
+            row_len = len(row)
+            
+            # Helper to get clean value
+            def get_val(col_idx):
+                if col_idx >= row_len: return None
+                v = row.iloc[col_idx]
+                if pd.isna(v): return None
+                s = str(v).strip()
+                if s.lower() in ['nan', 'none', '']: return None
+                return s
+
+            cat = get_val(1)
+            sub = get_val(2)
+            group = get_val(3)
+            item = get_val(4)
+            amount = self._clean_currency(row.iloc[5]) if row_len > 5 else 0
+            
+            if cat: 
+                current_cat = cat
+                current_sub = None
+                current_group = None
+            if sub: 
+                current_sub = sub
+                current_group = None
+            if group: 
+                current_group = group
+            
+            if amount > 0:
+                parts = []
+                if current_group: parts.append(current_group)
+                if item: parts.append(item)
+                full_item = ' - '.join(parts) if parts else current_sub or current_cat
+                
+                data.append({
+                    'Category': current_cat,
+                    'Subcategory': current_sub,
+                    'Item': full_item,
+                    'Amount': amount
+                })
+
+        return pd.DataFrame(data)
+
+    def get_all_data(self):
         sqlite_expenses = load_table("expenses") if os.path.exists(DB_NAME) else pd.DataFrame()
         sqlite_cc_payments = load_table("credit_card_payments") if os.path.exists(DB_NAME) else pd.DataFrame()
         sqlite_lending = load_table("lending") if os.path.exists(DB_NAME) else pd.DataFrame()
@@ -172,7 +227,8 @@ class DataLoader:
             "net_worth": nw_details["net_worth_df"],
             "loans": nw_details["loans_nw_df"],
             "pf_value": nw_details["pf_value"],
-            "expenses": sqlite_expenses
+            "expenses": sqlite_expenses,
+            "budget": self._parse_monthly_budget(excel)
         }
         
         return data

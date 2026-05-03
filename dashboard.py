@@ -113,26 +113,26 @@ def show_dashboard(data, metrics):
         
         if not nw_history.empty:
             fig_hist = px.line(nw_history, x='Date', y='Net Worth', markers=True)
-            st.plotly_chart(fig_hist, use_container_width=True)
+            st.plotly_chart(fig_hist, width="stretch")
         else:
             months = np.arange(1, 13)
             monthly_savings = metrics.get('wealth_velocity', 0)
             projection = [metrics.get('net_worth', 0) + (monthly_savings * m) for m in months]
             fig_proj = px.line(x=months, y=projection, markers=True, labels={'x':'Month', 'y':'Net Worth'})
             fig_proj.update_layout(yaxis_tickformat=",.0f")
-            st.plotly_chart(fig_proj, use_container_width=True)
+            st.plotly_chart(fig_proj, width="stretch")
 
         st.subheader("Income vs Expenses")
         cash_flow_df = FinanceCalculations.get_cash_flow_data(metrics, data)
         fig_cf = px.bar(cash_flow_df, x='Category', y='Amount', color='Category', 
                          color_discrete_sequence=['#2ECC71', '#E74C3C', '#3498DB'], text_auto='.2s')
-        st.plotly_chart(fig_cf, use_container_width=True)
+        st.plotly_chart(fig_cf, width="stretch")
 
     with right_col:
         st.subheader("Asset Allocation")
         asset_df = FinanceCalculations.get_asset_allocation(metrics, data)
         fig_pie = px.pie(asset_df, values='Balance', names='Asset', hole=.4, color_discrete_sequence=px.colors.qualitative.T10)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width="stretch")
 
         st.subheader("Credit Health")
         fig_gauge = go.Figure(go.Indicator(
@@ -144,7 +144,7 @@ def show_dashboard(data, metrics):
                 'steps' : [{'range': [0, 30], 'color': "rgba(46, 204, 113, 0.2)"}, {'range': [30, 70], 'color': "rgba(241, 196, 15, 0.2)"}, {'range': [70, 100], 'color': "rgba(231, 76, 60, 0.2)"}]
             }
         ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+        st.plotly_chart(fig_gauge, width="stretch")
 
 def show_trends(data):
     st.title("Bill & Payment Trends 📈")
@@ -171,10 +171,10 @@ def show_trends(data):
             tooltip=['ExactDate', 'Category', 'Amount', 'Type']
         ).properties(height=450).interactive()
         
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
         
         st.subheader("Recent Activity")
-        st.dataframe(plot_df.sort_values('Date', ascending=False)[['ExactDate', 'Category', 'Amount', 'Type']], use_container_width=True)
+        st.dataframe(plot_df.sort_values('Date', ascending=False)[['ExactDate', 'Category', 'Amount', 'Type']], width="stretch")
     else:
         st.info("No payment history found to display trends.")
 
@@ -235,7 +235,7 @@ def show_lending(data):
             lend_display = lend_df[lend_df['isCleared'] != 'Yes'].copy()
         else: lend_display = lend_df.copy()
         l_cols = ['Lent to', 'Amount Lent', 'Amount Due', 'Due Date', 'isCleared']
-        st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], use_container_width=True)
+        st.dataframe(lend_display[[c for c in l_cols if c in lend_display.columns]], width="stretch")
         
         st.subheader("EMI Obligations")
         # EXCLUDED_OWNERS defined at top of dashboard.py or calculations.py
@@ -251,7 +251,7 @@ def show_lending(data):
         st.subheader("Money Owed (Loans)")
         loan_df = data['loans']
         loan_display = loan_df[(loan_df['Cleared'] == 'No') & (loan_df['own'] == 'Yes')].copy() if not loan_df.empty else loan_df
-        st.dataframe(loan_display, use_container_width=True)
+        st.dataframe(loan_display, width="stretch")
 
 def show_goals(metrics):
     st.title("Goals & Wishlist 🎯")
@@ -265,6 +265,174 @@ def show_goals(metrics):
     
     forecast_msg = FinanceCalculations.get_goal_forecast(metrics, target)
     st.success(f"**Estimated Completion:** {forecast_msg}")
+
+def show_budget(data):
+    st.title("Monthly Budget 📊")
+    budget_df = data.get('budget')
+    
+    if isinstance(budget_df, list):
+        budget_df = pd.DataFrame(budget_df)
+    
+    if budget_df is None or budget_df.empty:
+        st.warning("No budget data found in the 'Monthly Budget' sheet.")
+        return
+
+    income = budget_df[budget_df['Category'] == 'Income']['Amount'].sum()
+    expenses = budget_df[budget_df['Category'] != 'Income']['Amount'].sum()
+    savings_plan = income - expenses
+
+    st.markdown("""
+        <style>
+        /* Modern Premium Budget Styles */
+        .budget-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 0;
+        }
+        
+        .budget-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            margin-bottom: 40px;
+        }
+        
+        .budget-card {
+            padding: 32px;
+            border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .card-income { 
+            background: linear-gradient(135deg, #f0f7ff 0%, #e6f2ff 100%);
+            border-left: 8px solid #007bff; 
+        }
+        .card-expenses { 
+            background: linear-gradient(135deg, #fff5f5 0%, #fff0f0 100%);
+            border-left: 8px solid #ff4d4f; 
+        }
+        .card-savings { 
+            background: linear-gradient(135deg, #f6ffed 0%, #f0f9eb 100%);
+            border-left: 8px solid #52c41a; 
+        }
+        
+        .card-label {
+            font-size: 15px;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+        }
+        .card-value {
+            font-size: 40px;
+            font-weight: 800;
+            color: #111;
+            line-height: 1;
+        }
+        
+        .category-card {
+            background: white;
+            padding: 32px;
+            border-radius: 20px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            margin-bottom: 32px;
+        }
+        .category-header {
+            font-size: 20px;
+            font-weight: 800;
+            color: #111;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #f8f9fa;
+            padding-bottom: 16px;
+        }
+        .cat-total {
+            font-size: 22px;
+            font-weight: 700;
+            color: #000;
+        }
+        
+        .budget-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 14px 0;
+            border-bottom: 1px solid #fcfcfc;
+            align-items: center;
+        }
+        .row-label { 
+            font-size: 16px; 
+            font-weight: 500;
+            color: #444; 
+        }
+        .row-amount { 
+            font-size: 18px; 
+            font-weight: 700; 
+            color: #000; 
+        }
+        
+        .subcategory-header {
+            font-weight: 800;
+            font-size: 13px;
+            color: #999;
+            margin-top: 24px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Wrap content in a focused container
+    st.markdown('<div class="budget-container">', unsafe_allow_html=True)
+
+    # Summary Cards
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f'<div class="budget-card card-income"><div class="card-label">Expected Income</div><div class="card-value">₹{income:,.0f}</div></div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'<div class="budget-card card-expenses"><div class="card-label">Budgeted Burn</div><div class="card-value">₹{expenses:,.0f}</div></div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'<div class="budget-card card-savings"><div class="card-label">Projected Savings</div><div class="card-value">₹{savings_plan:,.0f}</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-bottom: 48px;'></div>", unsafe_allow_html=True)
+
+    # Detailed Category View
+    all_cats = budget_df['Category'].unique()
+    left_col, right_col = st.columns(2)
+    
+    for i, cat in enumerate(all_cats):
+        target_col = left_col if i % 2 == 0 else right_col
+        cat_data = budget_df[budget_df['Category'] == cat]
+        cat_total = cat_data['Amount'].sum()
+        
+        with target_col:
+            items_html = ""
+            subcats = cat_data['Subcategory'].unique()
+            for sub in subcats:
+                if sub:
+                    items_html += f'<div class="subcategory-header">{sub}</div>'
+                
+                sub_items = cat_data[cat_data['Subcategory'] == sub] if sub else cat_data[cat_data['Subcategory'].isna()]
+                for _, row in sub_items.iterrows():
+                    items_html += f'<div class="budget-row"><span class="row-label">{row["Item"]}</span><span class="row-amount">₹{row["Amount"]:,.0f}</span></div>'
+            
+            st.markdown(f"""
+                <div class="category-card">
+                    <div class="category-header">
+                        <span>{cat}</span>
+                        <span class="cat-total">₹{cat_total:,.0f}</span>
+                    </div>
+                    {items_html}
+                </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
     # Init loader
@@ -283,17 +451,19 @@ def main():
     metrics = FinanceCalculations.get_summary_metrics(data)
 
     # Top Navigation with split titles
-    tabs = st.tabs(["📊\nDashboard", "📈\nTrends", "📝\nQuick Entry", "🤝\nLending", "🎯\nGoals"])
+    tabs = st.tabs(["📊\nDashboard", "📈\nTrends", "📅\nBudget", "📝\nQuick Entry", "🤝\nLending", "🎯\nGoals"])
     
     with tabs[0]:
         show_dashboard(data, metrics)
     with tabs[1]:
         show_trends(data)
     with tabs[2]:
-        show_quick_entry()
+        show_budget(data)
     with tabs[3]:
-        show_lending(data)
+        show_quick_entry()
     with tabs[4]:
+        show_lending(data)
+    with tabs[5]:
         show_goals(metrics)
 
 if __name__ == "__main__":
