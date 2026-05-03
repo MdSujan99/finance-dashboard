@@ -7,7 +7,7 @@ This project contains two distinct implementations of the Financial Dashboard. A
 - **Main File:** `dashboard.py`
 - **Title:** "Financial Intelligence Dashboard"
 - **Entry Point:** `streamlit run dashboard.py`
-- **Features:** Richer visualizations (Plotly, Altair), sidebar actions, and tab-based navigation.
+- **Features:** Richer visualizations (Plotly, Altair), sidebar actions, and tab-based navigation (Dashboard, Credit, Budget, Lending, Goals).
 
 ### 2. FastAPI Implementation (Secondary/Web UI)
 - **Main File:** `main.py`
@@ -31,5 +31,6 @@ This project contains two distinct implementations of the Financial Dashboard. A
 - **Streamlit Button:** Located in the sidebar.
 
 ## UI Customizations
+- **Credit Tab:** Replaced the "Trends" tab. Now contains both detailed Credit Card metrics (Limit, Due, Available) and the Payment Trends charts.
 - **Quick Entry / Manage Data:** The "Quick Entry" tab (Streamlit) and "Manage Financial Data" section (FastAPI) have been **disabled** at the user's request. 
     - The code for these features remains in `dashboard.py` (`show_quick_entry`) and `templates/dashboard.html` (inside a `display: none` div) but should not be rendered in the active UI.

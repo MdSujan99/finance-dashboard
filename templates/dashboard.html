@@ -335,7 +335,7 @@
 
         <div class="section-grid">
             <!-- Active Lendings -->
-            <div class="section">
+            <div class="section card-personal">
                 <h2>Active Lendings</h2>
                 {% if data.active_lendings %}
                 <table>
@@ -362,7 +362,7 @@
             </div>
 
             <!-- Credit Card Utilisation -->
-            <div class="section">
+            <div class="section card-expenses">
                 <h2>Credit Card Utilisation</h2>
                 {% if data.cc_utilization %}
                 <table>
@@ -412,7 +412,7 @@
             </div>
 
             <!-- Monthly Income -->
-            <div class="section">
+            <div class="section card-income">
                 <h2>Monthly Income Summary</h2>
                 {% if data.incomes %}
                 <table>
