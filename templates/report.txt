@@ -18,6 +18,14 @@ FI Ratio:               {{ fi_ratio }} years
 Liquidity:              ₹{{ liquidity|format_currency }} (Cash + Savings)
 Net Worth (Est.):       ₹{{ net_worth|format_currency }}
 
+--- METRIC DEFINITIONS & FORMULAS ---
+{% if metric_explanations %}
+{% for label, explanation in metric_explanations.items() %}
+[{{ label }}]
+{{ explanation }}
+
+{% endfor %}
+{% endif %}
 --- FINANCIAL SUMMARY ---
 Total Cash:             ₹{{ total_cash|format_currency }}
 Total Savings:          ₹{{ total_savings|format_currency }}
