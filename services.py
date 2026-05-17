@@ -22,23 +22,14 @@ class FinanceService:
 
     def generate_report(self, data: Dict[str, Any]) -> str:
         """
-        Renders the enhanced financial report using the Jinja2 template.
+        Renders the high-fidelity HTML financial report.
         """
-        template = self.jinja_env.get_template("report.txt")
+        template = self.jinja_env.get_template("rich_report.html")
         
-        # Prepare context
+        # Prepare context with all metrics and data
         context = {
             **data,
-            "now_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "liquidity": data.get("total_cash", 0) + data.get("total_savings", 0),
-            "payments_history": [
-                {
-                    "date": row.get("Payment Date").strftime("%Y-%m-%d"),
-                    "amount": row.get("Amount Paid", 0),
-                    "card": row.get("Card Name", "Unknown")
-                }
-                for _, row in data.get("payments", pd.DataFrame()).sort_values("Payment Date").tail(10).iterrows()
-            ]
+            "now_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
         return template.render(context)

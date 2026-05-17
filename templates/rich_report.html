@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Intelligence Report - {{ now_date }}</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-main: #1a1a1a;
+            --text-dim: #666666;
+            --accent: #007bff;
+            --success: #28a745;
+            --danger: #dc3545;
+            --border: #e9ecef;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 20px;
+        }
+
+        h1 { margin: 0; font-size: 2.2rem; font-weight: 800; color: #000; }
+        .timestamp { color: var(--text-dim); font-size: 0.9rem; margin-top: 10px; }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 40px 0 20px 0;
+            display: flex;
+            align-items: center;
+        }
+        .section-title::after {
+            content: "";
+            flex-grow: 1;
+            height: 2px;
+            background: var(--border);
+            margin-left: 15px;
+        }
+
+        /* Level 1: Primary Grid */
+        .grid-primary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+        }
+
+        .card-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 2rem;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+        .card-value.money::before { content: "₹"; margin-right: 2px; }
+
+        /* Level 2: Secondary Grid */
+        .grid-secondary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        .card.small { padding: 16px 20px; }
+        .card.small .card-value { font-size: 1.4rem; }
+
+        /* Level 3: Deep Dive Accordions */
+        .deep-dive {
+            margin-top: 50px;
+        }
+        
+        details {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        summary {
+            padding: 18px 24px;
+            cursor: pointer;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            list-style: none;
+            user-select: none;
+        }
+        summary:hover { background-color: #fcfcfc; }
+        summary::-webkit-details-marker { display: none; }
+        summary::after {
+            content: "▼";
+            font-size: 0.7rem;
+            color: #999;
+            transition: transform 0.3s;
+        }
+        details[open] summary::after { transform: rotate(180deg); }
+
+        .details-content {
+            padding: 24px;
+            background: #fafafa;
+            border-top: 1px solid var(--border);
+        }
+
+        .label-sub {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            border-left: 4px solid var(--accent);
+        }
+        .calc-block {
+            background: #fff;
+            color: #333;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px dashed #ced4da;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+        }
+
+        /* Themes */
+        .theme-blue { border-top: 5px solid var(--accent); }
+        .theme-green { border-top: 5px solid var(--success); }
+        .theme-red { border-top: 5px solid var(--danger); }
+        .theme-purple { border-top: 5px solid #6f42c1; }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .container { max-width: 100%; }
+            details { break-inside: avoid; border: 1px solid #eee; }
+            summary::after { display: none; }
+            .details-content { display: block !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Financial Intelligence Report</h1>
+            <div class="timestamp">Generated on {{ now_date }}</div>
+        </header>
+
+        <!-- Level 1 -->
+        <div class="section-title">Primary Insights</div>
+        <div class="grid-primary">
+            <div class="card theme-green">
+                <div class="card-label">Net Worth Estimate</div>
+                <div class="card-value money" style="color: var(--success)">{{ "{:,.0f}".format(net_worth) }}</div>
+            </div>
+            <div class="card theme-blue">
+                <div class="card-label">Wealth Velocity</div>
+                <div class="card-value money">{{ "{:,.0f}".format(wealth_velocity) }}<span style="font-size: 0.9rem; color: #666;">/mo</span></div>
+            </div>
+            <div class="card theme-purple">
+                <div class="card-label">Savings Rate</div>
+                <div class="card-value">{{ savings_rate }}%</div>
+            </div>
+            <div class="card theme-red">
+                <div class="card-label">Financial Runway</div>
+                <div class="card-value">{{ runway }} <span style="font-size: 0.9rem; color: #666;">Months</span></div>
+            </div>
+        </div>
+
+        <!-- Level 2 -->
+        <div class="section-title">Supporting Metrics</div>
+        <div class="grid-secondary">
+            <div class="card small">
+                <div class="card-label">Liquidity</div>
+                <div class="card-value money">{{ "{:,.0f}".format(total_cash + total_savings) }}</div>
+            </div>
+            <div class="card small">
+                <div class="card-label">FI Ratio</div>
+                <div class="card-value">{{ fi_ratio }} <span style="font-size: 0.8rem; color: #666;">Years</span></div>
+            </div>
+            <div class="card small">
+                <div class="card-label">Credit Utilisation</div>
+                <div class="card-value" style="color: {{ 'var(--danger)' if util_pct > 30 else 'var(--success)' }}">{{ util_pct }}%</div>
+            </div>
+            <div class="card small">
+                <div class="card-label">Available Funds</div>
+                <div class="card-value money">{{ "{:,.0f}".format(total_available_funds) }}</div>
+            </div>
+        </div>
+
+        <!-- Level 3 -->
+        <div class="deep-dive">
+            <div class="section-title">Metric Deep Dive (Formulas & Logic)</div>
+            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">
+                Transparency is key. Below is the exact logic used to calculate your financial health markers.
+            </p>
+            
+            {% if metric_explanations %}
+                {% for label, explanation in metric_explanations.items() %}
+                <details>
+                    <summary>{{ label }}</summary>
+                    <div class="details-content">
+                        {% set parts = explanation.split('\n', 1) %}
+                        {% if parts|length > 1 %}
+                            <span class="label-sub">Standard Formula</span>
+                            <div class="code-block">{{ parts[0] }}</div>
+                            <span class="label-sub">Current Calculation Breakdown</span>
+                            <div class="calc-block">{{ parts[1] }}</div>
+                        {% else %}
+                            <div class="code-block">{{ explanation }}</div>
+                        {% endif %}
+                    </div>
+                </details>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        <div style="margin-top: 60px; text-align: center; font-size: 0.8rem; color: #999; border-top: 1px solid var(--border); padding-top: 20px;">
+            End of Intelligence Report. All calculations are based on your most recent financial data sync.
+        </div>
+    </div>
+
+</body>
+</html>

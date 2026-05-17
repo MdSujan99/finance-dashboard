@@ -7,7 +7,16 @@ import altair as alt
 from datetime import datetime
 
 from services import FinanceService
-from models import engine, Account, CreditCard, CCPayment, Lending, Loan, Income, create_db_and_tables
+from models import (
+    engine,
+    Account,
+    CreditCard,
+    CCPayment,
+    Lending,
+    Loan,
+    Income,
+    create_db_and_tables,
+)
 from sqlmodel import Session, select
 from calculations import FinanceCalculations, EXCLUDED_OWNERS
 from utils import format_date
@@ -180,24 +189,19 @@ st.markdown(
 )
 
 
-def render_premium_card(label, value, theme_class, col, explanations=None):
+def render_metric_card(label, value, theme_class, col, small=False):
+    font_size = "2rem" if not small else "1.5rem"
+    padding = "24px" if not small else "16px"
     with col:
         st.markdown(
             f"""
-            <div class="premium-card {theme_class}">
-                <div class="card-label">{label}</div>
-                <div class="card-value">{value}</div>
+            <div class="premium-card {theme_class}" style="padding: {padding};">
+                <div class="card-label" style="font-size: {'14px' if not small else '12px'};">{label}</div>
+                <div class="card-value" style="font-size: {font_size};">{value}</div>
             </div>
         """,
             unsafe_allow_html=True,
         )
-        if explanations:
-            with st.popover("ƒ", help="Calculation Details"):
-                st.markdown(f"### {label}")
-                st.code(
-                    explanations.get(label.split(" ", 1)[-1], "No details"),
-                    language="text",
-                )
 
 
 def show_dashboard(data, metrics):
@@ -205,83 +209,118 @@ def show_dashboard(data, metrics):
 
     explanations = metrics.get("metric_explanations", {})
 
-    # --- Top Row Metrics ---
-    cols1 = st.columns(5)
-    render_premium_card(
+    # --- Level 1: Primary Insights (Always Visible, Large) ---
+    st.markdown("### Primary Insights")
+    l1_cols = st.columns(4)
+    render_metric_card(
         "💰 Net Worth",
         f"₹{metrics.get('net_worth', 0):,.0f}",
         "card-savings",
-        cols1[0],
-        explanations,
+        l1_cols[0],
     )
-    render_premium_card(
-        "🚀 Wealth Velocity",
-        f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo",
-        "card-income",
-        cols1[1],
-        explanations,
-    )
-    render_premium_card(
-        "🏖️ FI Ratio",
-        f"{metrics.get('fi_ratio', 0)} Yrs",
-        "card-personal",
-        cols1[2],
-        explanations,
-    )
-    render_premium_card(
-        "🛫 Runway",
-        f"{metrics.get('runway', 0)} Mo",
-        "card-non-personal",
-        cols1[3],
-        explanations,
-    )
-    render_premium_card(
+    render_metric_card(
         "📈 Savings Rate",
         f"{metrics.get('savings_rate', 0)}%",
         "card-generic",
-        cols1[4],
-        explanations,
+        l1_cols[1],
+    )
+    render_metric_card(
+        "🛫 Runway", f"{metrics.get('runway', 0)} Mo", "card-non-personal", l1_cols[2]
+    )
+    render_metric_card(
+        "🚀 Wealth Velocity",
+        f"₹{metrics.get('wealth_velocity', 0):,.0f}/mo",
+        "card-income",
+        l1_cols[3],
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- Bottom Row Metrics ---
-    cols2 = st.columns(6)
-    render_premium_card(
+    # --- Level 2: Supporting Metrics (Visible but less dominant) ---
+    st.markdown("#### Supporting Metrics")
+    l2_cols = st.columns(4)
+    liquidity = metrics.get("total_cash", 0) + metrics.get("total_savings", 0)
+    render_metric_card(
+        "💧 Liquidity", f"₹{liquidity:,.0f}", "card-generic", l2_cols[0], small=True
+    )
+    render_metric_card(
+        "🏖️ FI Ratio",
+        f"{metrics.get('fi_ratio', 0)} Yrs",
+        "card-personal",
+        l2_cols[1],
+        small=True,
+    )
+    render_metric_card(
+        "💳 Credit Util",
+        f"{metrics.get('util_pct', 0)}%",
+        "card-expenses",
+        l2_cols[2],
+        small=True,
+    )
+    render_metric_card(
+        "🛡️ Total Available",
+        f"₹{metrics.get('total_available_funds', 0):,.0f}",
+        "card-savings",
+        l2_cols[3],
+        small=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # --- Level 3: Deep Dive (Expandable Detail) ---
+    with st.expander("🔍 Metric Formulas & Calculation Breakdowns", expanded=False):
+        st.info(
+            "Click on a metric below to see the exact formula and numbers used for its calculation."
+        )
+
+        # We'll group these in columns for better vertical space usage
+        exp_cols = st.columns(2)
+
+        metric_keys = list(explanations.keys())
+        half = (len(metric_keys) + 1) // 2
+
+        for i, key in enumerate(metric_keys):
+            target_col = exp_cols[0] if i < half else exp_cols[1]
+            with target_col:
+                with st.expander(f"Detailed Breakdown: {key}", expanded=False):
+                    content = explanations.get(key, "No details available.")
+                    # Split formula from result if possible for cleaner look
+                    if "\n" in content:
+                        parts = content.split("\n", 1)
+                        st.markdown(f"**Formula:**")
+                        st.code(parts[0], language="text")
+                        st.markdown(f"**Current Calculation:**")
+                        st.code(parts[1], language="text")
+                    else:
+                        st.code(content, language="text")
+
+    st.markdown("<br><hr>", unsafe_allow_html=True)
+
+    # --- Cash Flow & Baseline Summary ---
+    st.subheader("Monthly Baseline")
+    col_a, col_b = st.columns(2)
+
+    l3_baseline_cols = st.columns(3)
+    render_metric_card(
         "💵 Income",
         f"₹{metrics.get('monthly_income', 0):,.0f}",
         "card-income",
-        cols2[0],
+        l3_baseline_cols[0],
+        small=True
     )
-    render_premium_card(
+    render_metric_card(
         "🔥 Burn",
         f"₹{metrics.get('monthly_expenses', 0):,.0f}",
         "card-expenses",
-        cols2[1],
+        l3_baseline_cols[1],
+        small=True
     )
-    render_premium_card(
-        "💳 Credit Used",
-        f"₹{metrics.get('total_cc_used', 0):,.0f}",
-        "card-expenses",
-        cols2[2],
-    )
-    render_premium_card(
-        "📊 Utilisation",
-        f"{metrics.get('util_pct', 0)}%",
-        "card-expenses" if metrics.get("util_pct", 0) > 30 else "card-generic",
-        cols2[3],
-    )
-    render_premium_card(
-        "💧 Liquidity",
-        f"₹{metrics.get('total_cash', 0) + metrics.get('total_savings', 0):,.0f}",
-        "card-savings",
-        cols2[4],
-    )
-    render_premium_card(
-        "🏦 Available",
+    render_metric_card(
+        "🛡️ Available",
         f"₹{metrics.get('total_available_funds', 0):,.0f}",
         "card-generic",
-        cols2[5],
+        l3_baseline_cols[2],
+        small=True
     )
 
     st.divider()
@@ -366,24 +405,28 @@ def show_credit(data, metrics):
 
     # --- Credit Summary Section ---
     cols_sum = st.columns(3)
-    render_premium_card(
-        "Total Max Limit",
+    render_metric_card(
+        "💳 Total Limit",
         f"₹{metrics.get('total_cc_limit', 0):,.0f}",
         "card-generic",
         cols_sum[0],
+        small=True
     )
-    render_premium_card(
-        "Total Credit Due",
+    render_metric_card(
+        "🔥 Total Due",
         f"₹{metrics.get('total_cc_used', 0):,.0f}",
         "card-expenses",
         cols_sum[1],
+        small=True
     )
-    render_premium_card(
-        "Total Available",
+    render_metric_card(
+        "🛡️ Available",
         f"₹{metrics.get('total_credit_available', 0):,.0f}",
         "card-savings",
         cols_sum[2],
+        small=True
     )
+
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.divider()
@@ -445,10 +488,14 @@ def show_credit(data, metrics):
     if not trend_df.empty:
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            types = ["ALL"] + sorted([str(x) for x in trend_df["Type"].dropna().unique()])
+            types = ["ALL"] + sorted(
+                [str(x) for x in trend_df["Type"].dropna().unique()]
+            )
             selected_type = st.selectbox("Filter by Bill Type", types)
         with col_f2:
-            categories = sorted([str(x) for x in trend_df["Category"].dropna().unique()])
+            categories = sorted(
+                [str(x) for x in trend_df["Category"].dropna().unique()]
+            )
             selected_cats = st.multiselect(
                 "Filter by Account(s)", categories, default=[]
             )
@@ -498,10 +545,20 @@ def show_quick_entry(service: FinanceService):
         with st.form("expense_form", clear_on_submit=True):
             category = st.selectbox(
                 "Category",
-                ["Food", "Transport", "Shopping", "Entertainment", "Bills", "Health", "Other"]
+                [
+                    "Food",
+                    "Transport",
+                    "Shopping",
+                    "Entertainment",
+                    "Bills",
+                    "Health",
+                    "Other",
+                ],
             )
             amount = st.number_input("Amount", min_value=0.0, format="%.2f")
-            account = st.selectbox("Account", ["Credit Card", "Cash", "Savings Account"])
+            account = st.selectbox(
+                "Account", ["Credit Card", "Cash", "Savings Account"]
+            )
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Add Expense")
             if submit:
@@ -512,9 +569,12 @@ def show_quick_entry(service: FinanceService):
         with Session(engine) as session:
             cards = session.exec(select(CreditCard)).all()
             card_options = {c.name: c.id for c in cards}
-            
+
         with st.form("cc_payment_form", clear_on_submit=True):
-            card_name = st.selectbox("Select Card", options=list(card_options.keys()) if card_options else ["None Found"])
+            card_name = st.selectbox(
+                "Select Card",
+                options=list(card_options.keys()) if card_options else ["None Found"],
+            )
             amount = st.number_input("Amount", min_value=0.0, format="%.2f")
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Record Payment")
@@ -522,7 +582,7 @@ def show_quick_entry(service: FinanceService):
                 service.add_manual_payment(
                     card_id=card_options[card_name],
                     amount=amount,
-                    date=datetime.combine(date, datetime.min.time())
+                    date=datetime.combine(date, datetime.min.time()),
                 )
                 st.success(f"Payment recorded for {card_name}!")
 
@@ -536,7 +596,7 @@ def show_quick_entry(service: FinanceService):
                 service.add_manual_lending(
                     person=borrower,
                     amount=amount,
-                    due_date=datetime.combine(due_date, datetime.min.time())
+                    due_date=datetime.combine(due_date, datetime.min.time()),
                 )
                 st.success(f"Lending to {borrower} recorded!")
 
@@ -548,9 +608,7 @@ def show_quick_entry(service: FinanceService):
             submit = st.form_submit_button("Add Income")
             if submit:
                 service.add_manual_income(
-                    source=source,
-                    amount=amount,
-                    date=date.strftime("%B %Y")
+                    source=source, amount=amount, date=date.strftime("%B %Y")
                 )
                 st.success(f"Income from {source} added!")
 
@@ -805,7 +863,7 @@ def main():
             st.rerun()
         return
 
-    metrics = data # FinanceService returns metrics merged with data
+    metrics = data  # FinanceService returns metrics merged with data
 
     # Show Sanity Warnings if any
     if "sanity_warnings" in data and data["sanity_warnings"]:
@@ -816,10 +874,10 @@ def main():
     st.sidebar.title("Actions")
     report_text = service.generate_report(data)
     st.sidebar.download_button(
-        label="📥 Download Report",
+        label="📥 Download Intelligence Report",
         data=report_text,
-        file_name=f"finance_report_{datetime.now().strftime('%Y%m%d')}.txt",
-        mime="text/plain",
+        file_name=f"financial_intelligence_report_{datetime.now().strftime('%Y%m%d')}.html",
+        mime="text/html",
     )
 
     if st.sidebar.button("🔄 Refresh Data"):

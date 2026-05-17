@@ -74,16 +74,16 @@ async def dashboard(request: Request):
 
 @app.get("/download_report")
 async def download_report():
-    """Generates and downloads a text-based financial report."""
+    """Generates and downloads a rich HTML-based financial report."""
     try:
         data = service.get_dashboard_data()
         report_content = service.generate_report(data)
 
-        return PlainTextResponse(
+        return HTMLResponse(
             content=report_content,
-            headers={
-                "Content-Disposition": f"attachment; filename=finance_report_{datetime.now().strftime('%Y%m%d')}.txt"
-            },
+            headers={"Content-Disposition": f"attachment; filename=financial_intelligence_report_{datetime.now().strftime('%Y%m%d')}.html"}
+        )
+
         )
     except Exception as e:
         logger.error(f"Report generation failed: {str(e)}", exc_info=True)
