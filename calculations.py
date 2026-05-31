@@ -69,7 +69,7 @@ class FinanceCalculations:
         if not sqlite_expenses_df.empty and 'amount' in sqlite_expenses_df.columns:
             now = datetime.now()
             if not pd.api.types.is_datetime64_any_dtype(sqlite_expenses_df['date']):
-                sqlite_expenses_df['date'] = pd.to_datetime(sqlite_expenses_df['date'])
+                sqlite_expenses_df['date'] = pd.to_datetime(sqlite_expenses_df['date'], dayfirst=True)
             
             mask = (sqlite_expenses_df['date'].dt.month == now.month) & \
                    (sqlite_expenses_df['date'].dt.year == now.year)
@@ -310,7 +310,7 @@ class FinanceCalculations:
         
         if 'Date' in history_df.columns and 'Net Worth' in history_df.columns:
             df = history_df.copy()
-            df['Date'] = pd.to_datetime(df['Date'])
+            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True)
             current_row = pd.DataFrame([{'Date': datetime.now(), 'Net Worth': current_nw}])
             df = pd.concat([df, current_row], ignore_index=True)
             return df.sort_values('Date')

@@ -97,7 +97,7 @@ def migrate_excel_to_sqlite(excel_path: str):
                 
                 if card_id:
                     amount = pay['Amount Paid']
-                    date = pd.to_datetime(pay['Payment Date'])
+                    date = pd.to_datetime(pay['Payment Date'], dayfirst=True)
                     entry_hash = generate_hash(card_id, amount, date.strftime("%Y-%m-%d"))
                     
                     # Check if hash already exists (Idempotency)
@@ -124,7 +124,7 @@ def migrate_excel_to_sqlite(excel_path: str):
                 due_date = lend.get('Due Date')
                 parsed_due = None
                 if due_date and due_date != "N/A":
-                    try: parsed_due = pd.to_datetime(due_date)
+                    try: parsed_due = pd.to_datetime(due_date, dayfirst=True)
                     except: pass
                 
                 # Check for existing lending (person, amount, due_date)

@@ -31,7 +31,7 @@ def format_date(value: Any) -> str:
     if isinstance(value, str):
         # Try to parse and re-format if it's already a date string
         try:
-            return pd.to_datetime(value).strftime("%Y-%m-%d")
+            return pd.to_datetime(value, dayfirst=True).strftime("%Y-%m-%d")
         except:
             return value
     return str(value)

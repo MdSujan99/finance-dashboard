@@ -70,7 +70,7 @@ class FinanceService:
                     if due_date and due_date != "N/A":
                         try:
                             # Use pd.to_datetime for consistency
-                            is_overdue = pd.to_datetime(due_date) < datetime.now()
+                            is_overdue = pd.to_datetime(due_date, dayfirst=True) < datetime.now()
                         except: pass
                     
                     result["active_lendings"].append({

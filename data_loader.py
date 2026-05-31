@@ -281,7 +281,7 @@ class DataLoader:
     def _format_cc_payments(self, sqlite_df, excel_df):
         if sqlite_df.empty: return excel_df
         res = sqlite_df.rename(columns={'date': 'Payment Date', 'amount': 'Amount Paid'})
-        res['Payment Date'] = pd.to_datetime(res['Payment Date'])
+        res['Payment Date'] = pd.to_datetime(res['Payment Date'], dayfirst=True)
         return pd.concat([excel_df, res], ignore_index=True).fillna("Unknown")
 
     def _format_lendings(self, sqlite_df, excel_df):
