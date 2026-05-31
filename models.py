@@ -10,9 +10,10 @@ load_dotenv()
 
 class Account(SQLModel, table=True):
     """Maps to 'Net Worth' (Cash/Savings totals)"""
-    __table_args__ = (UniqueConstraint("name"), {"extend_existing": True})
+    __table_args__ = (UniqueConstraint("source", "type"), {"extend_existing": True})
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str  # e.g., "Cash", "Savings"
+    source: str  # e.g., "HDFC", "Cash", "SBI"
+    type: str    # e.g., "Savings", "Cash", "Investment", "PF"
     balance: float
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_manual: bool = Field(default=False)
@@ -92,6 +93,33 @@ class Investment(SQLModel, table=True):
     date: datetime = Field(default_factory=datetime.utcnow)
     entry_hash: Optional[str] = Field(default=None, unique=True, index=True)
     is_manual: bool = Field(default=True)
+
+class BudgetLineItem(SQLModel, table=True):
+    """Stores the hierarchical monthly budget"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    category: str
+    subcategory: Optional[str] = None
+    item: str
+    amount: float
+    is_manual: bool = Field(default=False)
+
+class NetWorthSnapshot(SQLModel, table=True):
+    """Tracks historical net worth values"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    date: datetime = Field(index=True)
+    amount: float
+    is_manual: bool = Field(default=False)
+
+class WishlistItem(SQLModel, table=True):
+    """Tracks financial wishlist items"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    item: str
+    amount: float
+    priority: str = Field(default="Normal")
+    is_manual: bool = Field(default=False)
 
 # Database Engine Configuration (SQLite by default for unified access)
 DB_NAME = "finance.db"

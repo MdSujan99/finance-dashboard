@@ -14,7 +14,7 @@ class FinanceService:
     Unified service layer for fetching and processing financial data.
     """
     def __init__(self):
-        self.loader = DataLoader("latest_finance.xlsx")
+        self.loader = DataLoader()
         self.jinja_env = jinja2.Environment(
             loader=jinja2.FileSystemLoader("templates")
         )
@@ -122,9 +122,9 @@ class FinanceService:
             ))
             session.commit()
 
-    def update_account_balance(self, name: str, balance: float):
+    def update_account_balance(self, source: str, balance: float, type: str = "Savings"):
         with Session(engine) as session:
-            statement = select(Account).where(Account.name == name)
+            statement = select(Account).where(Account.source == source, Account.type == type)
             account = session.exec(statement).first()
             if account:
                 account.balance = balance

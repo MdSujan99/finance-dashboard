@@ -400,6 +400,126 @@ def show_dashboard(data, metrics):
         st.plotly_chart(fig_gauge, width="stretch")
 
 
+def show_net_worth(data, metrics):
+    st.title("Net Worth Breakdown 💰")
+
+    # Summary Metrics
+    total_assets = metrics.get("total_assets", 0)
+    total_liabilities = metrics.get("total_liabilities", 0)
+    net_worth = metrics.get("net_worth", 0)
+
+    col1, col2, col3 = st.columns(3)
+    render_metric_card(
+        "🏦 Total Assets", f"₹{total_assets:,.0f}", "card-savings", col1
+    )
+    render_metric_card(
+        "💸 Total Liabilities", f"₹{total_liabilities:,.0f}", "card-expenses", col2
+    )
+    render_metric_card(
+        "💰 Net Worth", f"₹{net_worth:,.0f}", "card-generic", col3
+    )
+
+    st.divider()
+
+    asset_col, liab_col = st.columns(2)
+
+    with asset_col:
+        st.subheader("Assets 📈")
+
+        # 1. Cash & Bank Balances
+        nw_df = data.get("net_worth", pd.DataFrame())
+        if not nw_df.empty:
+            with st.expander("💵 Cash & Bank Balances", expanded=True):
+                for _, row in nw_df.iterrows():
+                    st.markdown(
+                        f"""
+                        <div class="budget-row">
+                            <span class="row-label">{row['Name']} <small style="color:#888">({row['Category']})</small></span>
+                            <span class="row-amount">₹{row['Balance']:,.0f}</span>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+        # 2. Retirement (PF)
+        pf_val = data.get("pf_value", 0)
+        if pf_val > 0:
+            with st.expander("🛡️ Retirement Funds", expanded=True):
+                st.markdown(
+                    f"""
+                    <div class="budget-row" style="border-bottom: none;">
+                        <span class="row-label">PF Account</span>
+                        <span class="row-amount">₹{pf_val:,.0f}</span>
+                    </div>
+                """,
+                    unsafe_allow_html=True,
+                )
+
+        # 3. Investments
+        inv_df = data.get("investments", pd.DataFrame())
+        if not inv_df.empty:
+            with st.expander("🚀 Investments", expanded=True):
+                for _, row in inv_df.iterrows():
+                    st.markdown(
+                        f"""
+                        <div class="budget-row">
+                            <span class="row-label">{row['name']}</span>
+                            <span class="row-amount">₹{row['amount']:,.0f}</span>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+        # 4. Lendings (Money Owed to You)
+        lend_df = data.get("lendings_nw", pd.DataFrame())
+        if not lend_df.empty:
+            with st.expander("🤝 Lendings (Receivable)", expanded=True):
+                for _, row in lend_df.iterrows():
+                    st.markdown(
+                        f"""
+                        <div class="budget-row">
+                            <span class="row-label">{row['Lent to']}</span>
+                            <span class="row-amount">₹{row['Amount Lent']:,.0f}</span>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+    with liab_col:
+        st.subheader("Liabilities 📉")
+
+        # 1. Credit Card Dues
+        cc_df = data.get("credit_cards", pd.DataFrame())
+        if not cc_df.empty and cc_df["Current Balance"].sum() > 0:
+            with st.expander("💳 Credit Card Dues", expanded=True):
+                for _, row in cc_df.iterrows():
+                    if row["Current Balance"] > 0:
+                        st.markdown(
+                            f"""
+                            <div class="budget-row">
+                                <span class="row-label">{row['Card Provider']}</span>
+                                <span class="row-amount" style="color: #ff4d4f;">₹{row['Current Balance']:,.0f}</span>
+                            </div>
+                        """,
+                            unsafe_allow_html=True,
+                        )
+
+        # 2. Loans & EMIs
+        loan_df = data.get("loans", pd.DataFrame())
+        if not loan_df.empty:
+            with st.expander("🏦 Loans & Outstanding", expanded=True):
+                for _, row in loan_df.iterrows():
+                    st.markdown(
+                        f"""
+                        <div class="budget-row">
+                            <span class="row-label">{row['Loan Name']}</span>
+                            <span class="row-amount" style="color: #ff4d4f;">₹{row['Amount Due']:,.0f}</span>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+
 def show_credit(data, metrics):
     st.title("Credit Summary")
 
@@ -885,18 +1005,27 @@ def main():
 
     # Top Navigation with split titles
     tabs = st.tabs(
-        ["📊\nDashboard", "💳\nCredit", "📅\nBudget", "🤝\nLending", "🎯\nGoals"]
+        [
+            "📊\nDashboard",
+            "💰\nNet Worth",
+            "💳\nCredit",
+            "📅\nBudget",
+            "🤝\nLending",
+            "🎯\nGoals",
+        ]
     )
 
     with tabs[0]:
         show_dashboard(data, metrics)
     with tabs[1]:
-        show_credit(data, metrics)
+        show_net_worth(data, metrics)
     with tabs[2]:
-        show_budget(data)
+        show_credit(data, metrics)
     with tabs[3]:
-        show_lending(data)
+        show_budget(data)
     with tabs[4]:
+        show_lending(data)
+    with tabs[5]:
         show_goals(metrics)
 
 
